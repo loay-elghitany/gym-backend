@@ -1,0 +1,8 @@
+const express = require("express");
+const router = express.Router();
+const walletController = require("../controllers/walletController");
+
+router.post("/order", walletController.createOrder);
+router.get("/balance", walletController.getBalance);
+
+module.exports = router;
