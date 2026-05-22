@@ -16,7 +16,9 @@ exports.getPlans = async (req, res) => {
         tenantId: req.tenant._id,
         assignedTo: req.user._id,
         isActive: true,
-      }).sort({ createdAt: -1 });
+      })
+        .sort({ createdAt: -1 })
+        .populate("createdBy", "name email");
 
       return res.status(200).json({ success: true, data: { plans } });
     }
@@ -95,10 +97,17 @@ exports.createPlan = async (req, res) => {
       description,
       exercises,
       dietNotes,
+      memberIds,
       assignedTo = [],
       startDate,
       endDate,
     } = req.body;
+
+    const targetMemberIds = Array.isArray(memberIds)
+      ? memberIds
+      : Array.isArray(assignedTo)
+        ? assignedTo
+        : [];
 
     if (!title) {
       return res
@@ -106,12 +115,27 @@ exports.createPlan = async (req, res) => {
         .json({ success: false, message: "Title is required" });
     }
 
-    // Validate assignedTo are users within tenant
+    if (!targetMemberIds.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Please assign the plan to at least one member",
+      });
+    }
+
+    // Validate target member IDs are users within this tenant
     const validUsers = await User.find({
-      _id: { $in: assignedTo },
+      _id: { $in: targetMemberIds },
       tenantId: req.tenant._id,
+      role: "member",
     }).select("_id");
     const validIds = validUsers.map((u) => u._id);
+
+    if (!validIds.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid members found to assign the plan",
+      });
+    }
 
     const normalizedDietNotes = Array.isArray(dietNotes)
       ? dietNotes.map((note) => {
@@ -139,24 +163,26 @@ exports.createPlan = async (req, res) => {
         }))
       : [];
 
-    const newPlan = new Plan({
+    const planDocs = validIds.map((memberId) => ({
       title,
       description: description || "",
       exercises: normalizedExercises,
       dietNotes: normalizedDietNotes,
-      assignedTo: validIds,
+      assignedTo: [memberId],
       createdBy: req.user._id,
       tenantId: req.tenant._id,
       tenantSlug: req.tenant.slug,
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
+    }));
+
+    const createdPlans = await Plan.insertMany(planDocs);
+
+    res.status(201).json({
+      success: true,
+      message: `Plan assigned to ${createdPlans.length} member(s)`,
+      data: { plans: createdPlans },
     });
-
-    await newPlan.save();
-
-    res
-      .status(201)
-      .json({ success: true, message: "Plan created", data: newPlan });
   } catch (error) {
     console.error("CreatePlan Error:", error);
     res.status(500).json({

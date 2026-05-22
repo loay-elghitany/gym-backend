@@ -1,4 +1,6 @@
 const User = require("../models/User");
+const MembershipPackage = require("../models/MembershipPackage");
+const InBodyRecord = require("../models/InBodyRecord");
 
 /**
  * User Controller
@@ -97,6 +99,53 @@ exports.getUserById = async (req, res) => {
   }
 };
 
+exports.getTelegramStatus = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("+telegramChatId");
+    const connected = Boolean(user?.telegramChatId);
+    res.status(200).json({
+      success: true,
+      data: { connected },
+    });
+  } catch (error) {
+    console.error("GetTelegramStatus Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error checking Telegram status",
+      error: error.message,
+    });
+  }
+};
+
+exports.disconnectTelegram = async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { telegramChatId: null },
+      { new: true, runValidators: true },
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Telegram disconnected successfully",
+    });
+  } catch (error) {
+    console.error("DisconnectTelegram Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error disconnecting Telegram",
+      error: error.message,
+    });
+  }
+};
+
 // @route   PUT /api/users/:id/health-profile
 // @desc    Update member health profile entries
 // @access  Private (Trainer, GymOwner, Member self)
@@ -158,6 +207,25 @@ exports.updateHealthProfile = async (req, res) => {
 
     await user.save();
 
+    await InBodyRecord.create({
+      memberId: user._id,
+      tenantId: req.tenant._id,
+      weight: Number(parsedEntry.weight) || 0,
+      skeletalMuscleMass: Number(parsedEntry.muscleMass) || 0,
+      bodyFatMass: Number(parsedEntry.bodyFatMass) || 0,
+      bodyFatPercentage:
+        typeof parsedEntry.bodyFatPercentage === "number"
+          ? parsedEntry.bodyFatPercentage
+          : 0,
+      bmi: Number(parsedEntry.bmi) || 0,
+      bmr: Number(parsedEntry.bmr) || 0,
+      visceralFatLevel:
+        typeof parsedEntry.visceralFat === "number"
+          ? parsedEntry.visceralFat
+          : 0,
+      date: parsedEntry.date,
+    });
+
     res.status(200).json({
       success: true,
       message: "Health profile updated",
@@ -178,7 +246,7 @@ exports.updateHealthProfile = async (req, res) => {
 // @access  Private (GymOwner)
 exports.createUser = async (req, res) => {
   try {
-    const { name, email, password, role, phone } = req.body;
+    const { name, email, password, role, phone, packageId } = req.body;
     const normalizedEmail = email?.trim().toLowerCase();
     const normalizedRole = role ? role.toLowerCase() : "member";
 
@@ -210,8 +278,24 @@ exports.createUser = async (req, res) => {
       });
     }
 
+    if (normalizedRole === "member") {
+      const existingMemberCount = await User.countDocuments({
+        tenantId: req.tenant._id,
+        role: "member",
+        isActive: true,
+      });
+
+      if (existingMemberCount >= req.tenant.maxMembers) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "Member quota reached. Please contact Super Admin to upgrade your plan.",
+        });
+      }
+    }
+
     // Create new user linked to the owner tenant
-    const newUser = new User({
+    const newUserData = {
       name,
       email,
       password,
@@ -219,7 +303,53 @@ exports.createUser = async (req, res) => {
       phone,
       tenantId: req.tenant._id,
       tenantSlug: req.tenant.slug,
-    });
+    };
+
+    if (normalizedRole === "member") {
+      if (!packageId) {
+        return res.status(400).json({
+          success: false,
+          message: "Please provide a valid packageId for member creation",
+        });
+      }
+
+      const membershipPackage = await MembershipPackage.findOne({
+        _id: packageId,
+        tenantId: req.tenant._id,
+        isActive: true,
+      });
+
+      if (!membershipPackage) {
+        return res.status(404).json({
+          success: false,
+          message: "Membership package not found for this tenant",
+        });
+      }
+
+      const startDateValue = new Date();
+      const expiryDateValue = new Date(
+        startDateValue.getTime() +
+          membershipPackage.durationInDays * 24 * 60 * 60 * 1000,
+      );
+      const sessionCountValue = Number(membershipPackage.sessionCount) || 0;
+      const isUnlimited = sessionCountValue <= 0;
+
+      newUserData.subscription = {
+        packageId: membershipPackage._id,
+        packageType: membershipPackage.name,
+        membershipType: isUnlimited ? "unlimited" : "limited",
+        totalSessions: isUnlimited ? 0 : sessionCountValue,
+        remainingSessions: isUnlimited ? 0 : sessionCountValue,
+        price: Math.max(Number(membershipPackage.price) || 0, 0),
+        status: "active",
+        startDate: startDateValue,
+        expiryDate: expiryDateValue,
+        expiresAt: expiryDateValue,
+        autoRenew: true,
+      };
+    }
+
+    const newUser = new User(newUserData);
 
     await newUser.save();
 

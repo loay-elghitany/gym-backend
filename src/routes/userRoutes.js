@@ -2,6 +2,8 @@ const express = require("express");
 const {
   getAllUsers,
   getUserById,
+  getTelegramStatus,
+  disconnectTelegram,
   createUser,
   updateUser,
   deleteUser,
@@ -13,6 +15,10 @@ const router = express.Router();
 
 // All routes require authentication
 router.use(authMiddleware);
+
+// Telegram notification status for current user
+router.get("/telegram-status", getTelegramStatus);
+router.post("/telegram-disconnect", disconnectTelegram);
 
 // Get all users in tenant
 router.get("/", getAllUsers);

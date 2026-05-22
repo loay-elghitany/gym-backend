@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const config = require("../config/config");
 
 /**
  * Auth Middleware
@@ -19,10 +20,7 @@ const authMiddleware = async (req, res, next) => {
     }
 
     // Verify token
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || "your-secret-key",
-    );
+    const decoded = jwt.verify(token, config.jwtSecret);
 
     // Fetch user from database to ensure they still exist and are active
     const user = await User.findById(decoded.userId).select("-password");
@@ -38,6 +36,13 @@ const authMiddleware = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: "User account is inactive.",
+      });
+    }
+
+    if (req.tenantDocument?.status === "suspended") {
+      return res.status(403).json({
+        success: false,
+        message: "Service suspended",
       });
     }
 

@@ -3,28 +3,43 @@
  * Centralized configuration for the application
  */
 
+const nodeEnv = process.env.NODE_ENV || "development";
+const isProduction = nodeEnv === "production";
+
+const mongodbUri =
+  process.env.MONGODB_URI ||
+  (!isProduction ? "mongodb://localhost:27017/gym-backend" : undefined);
+const jwtSecret = process.env.JWT_SECRET;
+
+if (isProduction && !mongodbUri) {
+  throw new Error("MONGODB_URI is required in production but was not provided");
+}
+
+if (isProduction && !jwtSecret) {
+  throw new Error("JWT_SECRET is required in production but was not provided");
+}
+
 const config = {
-  // Server
   port: process.env.PORT || 5000,
-  nodeEnv: process.env.NODE_ENV || "development",
+  nodeEnv,
 
   // Database
-  mongodbUri:
-    process.env.MONGODB_URI || "mongodb://localhost:27017/gym-backend",
+  mongodbUri,
 
   // JWT
-  jwtSecret:
-    process.env.JWT_SECRET || "your-super-secret-key-change-in-production",
+  jwtSecret,
   jwtExpire: process.env.JWT_EXPIRE || "7d",
 
   // CORS
   corsOrigin: process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim())
-    : [
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:5173",
-      ],
+    : isProduction
+      ? []
+      : [
+          "http://localhost:3000",
+          "http://localhost:3001",
+          "http://localhost:5173",
+        ],
 
   // Logging
   logLevel: process.env.LOG_LEVEL || "info",

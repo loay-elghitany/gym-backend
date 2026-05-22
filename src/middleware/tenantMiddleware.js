@@ -37,19 +37,11 @@ const tenantMiddleware = async (req, res, next) => {
       });
     }
 
-    // Check if tenant is active
-    if (!tenant.isActive) {
+    // Check if tenant is active and not globally suspended
+    if (!tenant.isActive || tenant.status === "suspended") {
       return res.status(403).json({
         success: false,
-        message: "This tenant account is inactive",
-      });
-    }
-
-    // Check subscription status
-    if (tenant.subscriptionStatus === "suspended") {
-      return res.status(403).json({
-        success: false,
-        message: "This tenant account has been suspended",
+        message: "Service suspended",
       });
     }
 

@@ -115,7 +115,22 @@ const userSchema = new mongoose.Schema(
         default: 0,
         min: 0,
       },
+      rank: {
+        type: String,
+        enum: ["Bronze", "Silver", "Gold"],
+        default: "Bronze",
+      },
     },
+    badges: [
+      {
+        name: String,
+        description: String,
+        awardedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     attendanceHistory: [
       {
         date: {
@@ -138,12 +153,44 @@ const userSchema = new mongoose.Schema(
         type: mongoose.Schema.Types.ObjectId,
         ref: "Membership",
       },
+      packageId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "MembershipPackage",
+      },
+      packageType: {
+        type: String,
+        trim: true,
+        default: "Standard Plan",
+      },
+      membershipType: {
+        type: String,
+        enum: ["limited", "unlimited"],
+        default: "limited",
+      },
+      totalSessions: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      remainingSessions: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      price: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
       status: {
         type: String,
         enum: ["active", "expired", "paused"],
         default: "active",
       },
       startDate: {
+        type: Date,
+      },
+      expiryDate: {
         type: Date,
       },
       expiresAt: {
@@ -198,6 +245,12 @@ const userSchema = new mongoose.Schema(
         ],
       },
     ],
+    telegramChatId: {
+      type: String,
+      select: false,
+      default: null,
+      index: true,
+    },
   },
   {
     timestamps: true,

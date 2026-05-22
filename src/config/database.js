@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const config = require("./config");
 
 /**
  * MongoDB Connection Configuration
@@ -6,16 +7,15 @@ const mongoose = require("mongoose");
  */
 const connectDB = async () => {
   try {
-    const mongoURI =
-      process.env.MONGODB_URI || "mongodb://localhost:27017/gym-backend";
+    const mongoURI = config.mongodbUri;
 
-    // استخدام المتغير اللي بيضمن إن دايماً فيه رابط متاح
     await mongoose.connect(mongoURI);
 
     const conn = mongoose.connection;
 
-    // طباعة اسم الهوست بشكل صحيح
-    console.log(`✓ MongoDB Connected: ${conn.host}`);
+    if (config.nodeEnv !== "production") {
+      console.log(`✓ MongoDB Connected: ${conn.host}`);
+    }
 
     return conn;
   } catch (error) {

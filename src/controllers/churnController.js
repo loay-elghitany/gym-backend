@@ -18,16 +18,34 @@ exports.getChurnRadar = async (req, res) => {
       ],
     })
       .select(
-        "name email phone lastAttendanceAt gamification attendanceHistory",
+        "name email phone lastAttendanceAt createdAt gamification attendanceHistory",
       )
       .lean();
+
+    const normalizedMembers = membersAtRisk.map((member) => {
+      const referenceDate = member.lastAttendanceAt
+        ? new Date(member.lastAttendanceAt)
+        : new Date(member.createdAt || Date.now());
+      const daysAbsent = Math.max(
+        0,
+        Math.floor(
+          (Date.now() - referenceDate.getTime()) / (1000 * 60 * 60 * 24),
+        ),
+      );
+
+      return {
+        ...member,
+        lastAttendanceAt: referenceDate,
+        daysAbsent,
+      };
+    });
 
     res.status(200).json({
       success: true,
       data: {
         daysSinceLastAttendance,
-        count: membersAtRisk.length,
-        members: membersAtRisk,
+        count: normalizedMembers.length,
+        members: normalizedMembers,
       },
     });
   } catch (error) {

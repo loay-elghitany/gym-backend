@@ -45,8 +45,17 @@ const tenantSchema = new mongoose.Schema(
     },
     subscriptionPlan: {
       type: String,
-      enum: ["basic", "professional", "enterprise"],
-      default: "basic",
+      trim: true,
+      default: "custom",
+    },
+    planId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SaaSPlan",
+    },
+    planName: {
+      type: String,
+      trim: true,
+      default: "custom",
     },
     maxMembers: {
       type: Number,
@@ -57,6 +66,21 @@ const tenantSchema = new mongoose.Schema(
       type: Number,
       default: 10,
       min: 1,
+    },
+    primaryColor: {
+      type: String,
+      trim: true,
+      default: "#0f172a",
+    },
+    logoUrl: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    status: {
+      type: String,
+      enum: ["active", "suspended"],
+      default: "active",
     },
     isActive: {
       type: Boolean,

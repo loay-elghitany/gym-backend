@@ -1,4 +1,5 @@
 const express = require("express");
+const tenantMiddleware = require("../middleware/tenantMiddleware");
 const {
   register,
   login,
@@ -11,7 +12,7 @@ const { authMiddleware } = require("../middleware/authMiddleware");
 const router = express.Router();
 
 // Public routes
-router.post("/register", register);
+router.post("/register", tenantMiddleware, register);
 router.post("/login", login);
 
 // Protected routes

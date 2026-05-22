@@ -4,18 +4,86 @@ const connectDB = require("../config/database");
 const Tenant = require("../models/Tenant");
 const User = require("../models/User");
 const Membership = require("../models/Membership");
+const SaaSPlan = require("../models/SaaSPlan");
 
 const seedData = async () => {
   try {
     await connectDB();
     console.log("Connected to MongoDB for seeding...");
 
-    console.log("Clearing existing Tenant, User, and Membership data...");
+    console.log(
+      "Clearing existing Tenant, User, Membership and SaaS plan data...",
+    );
     await Promise.all([
       Tenant.deleteMany({}),
       User.deleteMany({}),
       Membership.deleteMany({}),
+      SaaSPlan.deleteMany({}),
     ]);
+
+    const plans = [
+      {
+        name: "Starter",
+        slug: "starter",
+        description:
+          "A lean plan for small studios that want essentials and predictable pricing.",
+        price: 29,
+        currency: "USD",
+        billingCycle: "monthly",
+        maxMembers: 100,
+        maxTrainers: 5,
+        features: [
+          "Core gym management",
+          "Member check-ins",
+          "Basic reporting",
+        ],
+        isActive: true,
+        displayOrder: 1,
+      },
+      {
+        name: "Growth",
+        slug: "growth",
+        description:
+          "Popular plan with advanced reporting, automation, and expanded member capacity.",
+        price: 79,
+        currency: "USD",
+        billingCycle: "monthly",
+        maxMembers: 250,
+        maxTrainers: 20,
+        features: [
+          "Everything in Starter",
+          "Automated reminders",
+          "Advanced analytics",
+          "Team permissions",
+        ],
+        isActive: true,
+        displayOrder: 2,
+      },
+      {
+        name: "Enterprise",
+        slug: "enterprise",
+        description:
+          "All-platform capabilities with white labeling, dedicated support, and enterprise quotas.",
+        price: 179,
+        currency: "USD",
+        billingCycle: "monthly",
+        maxMembers: 1000,
+        maxTrainers: 100,
+        features: [
+          "Everything in Growth",
+          "White-labeling",
+          "Dedicated account support",
+          "Unlimited tenant onboarding",
+        ],
+        isActive: true,
+        displayOrder: 3,
+      },
+    ];
+
+    await SaaSPlan.insertMany(plans);
+    console.log("Seeded default SaaS pricing plans.");
+
+    const enterprisePlan = await SaaSPlan.findOne({ slug: "enterprise" });
 
     const tenant = await Tenant.create({
       name: "Power Gym",
@@ -29,6 +97,8 @@ const seedData = async () => {
         zipCode: "00000",
         country: "UAE",
       },
+      planId: enterprisePlan?._id,
+      planName: enterprisePlan?.name || "Enterprise",
       subscriptionStatus: "active",
       subscriptionPlan: "enterprise",
       maxMembers: 500,
@@ -297,7 +367,6 @@ const seedData = async () => {
     console.log(
       "Seeding complete. Your database is ready for frontend integration.",
     );
-    console.log("Gym Owner credentials: elghitany@powergym.com / Loay@1234");
     process.exit(0);
   } catch (error) {
     console.error("Seeder error:", error);

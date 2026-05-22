@@ -22,12 +22,27 @@ const analyticsRoutes = require("./src/routes/analyticsRoutes");
 const challengeRoutes = require("./src/routes/challengeRoutes");
 const walletRoutes = require("./src/routes/walletRoutes");
 const workoutLogRoutes = require("./src/routes/workoutLogRoutes");
+const memberRoutes = require("./src/routes/memberRoutes");
+const trainerTemplateRoutes = require("./src/routes/trainerTemplateRoutes");
+const trainerInbodyRoutes = require("./src/routes/trainerInbodyRoutes");
+const trainerClassRoutes = require("./src/routes/trainerClassRoutes");
+const notificationRoutes = require("./src/routes/notificationRoutes");
+const broadcastRoutes = require("./src/routes/broadcastRoutes");
+const ownerPackageRoutes = require("./src/routes/ownerPackageRoutes");
+const ownerReportsRoutes = require("./src/routes/ownerReportsRoutes");
+const superAdminRoutes = require("./src/routes/superAdminRoutes");
+const {
+  scanAllTenantExpirations,
+} = require("./src/services/subscriptionNotificationService");
 
 // Initialize Express app
 const app = express();
 
 // Connect to MongoDB
 connectDB();
+
+// Initialize telegram bot service after DB connection
+require("./src/services/telegramService");
 
 // Middleware
 app.use(
@@ -44,15 +59,17 @@ app.use(
         return callback(null, true);
       }
 
-      // Allow dynamic subdomains of localhost on port 5173, e.g. http://power-gym.localhost:5173
-      try {
-        const url = new URL(origin);
-        const host = url.host; // e.g. power-gym.localhost:5173
-        if (host === "localhost:5173" || host.endsWith(".localhost:5173")) {
-          return callback(null, true);
+      // Allow dynamic subdomains of localhost on port 5173 in development only.
+      if (config.nodeEnv !== "production") {
+        try {
+          const url = new URL(origin);
+          const host = url.host; // e.g. power-gym.localhost:5173
+          if (host === "localhost:5173" || host.endsWith(".localhost:5173")) {
+            return callback(null, true);
+          }
+        } catch (err) {
+          // fallthrough to deny
         }
-      } catch (err) {
-        // fallthrough to deny
       }
 
       return callback(new Error("Not allowed by CORS"), false);
@@ -75,17 +92,19 @@ app.use(express.urlencoded({ extended: true }));
 
 // Request debug logging middleware
 app.use((req, res, next) => {
-  try {
-    const now = new Date().toISOString();
-    const origin = req.headers.origin || "none";
-    const tenant = req.headers["x-tenant-slug"] || "none";
-    const hasAuth = req.headers.authorization ? "yes" : "no";
-    console.log(
-      `[Request] ${now} ${req.method} ${req.originalUrl} Origin:${origin} Tenant:${tenant} Auth:${hasAuth}`,
-    );
-  } catch (err) {
-    // non-fatal logging error
-    console.error("Request logger error", err);
+  if (config.nodeEnv !== "production") {
+    try {
+      const now = new Date().toISOString();
+      const origin = req.headers.origin || "none";
+      const tenant = req.headers["x-tenant-slug"] || "none";
+      const hasAuth = req.headers.authorization ? "yes" : "no";
+      console.log(
+        `[Request] ${now} ${req.method} ${req.originalUrl} Origin:${origin} Tenant:${tenant} Auth:${hasAuth}`,
+      );
+    } catch (err) {
+      // non-fatal logging error
+      console.error("Request logger error", err);
+    }
   }
   next();
 });
@@ -100,8 +119,8 @@ app.get("/health", (req, res) => {
 });
 
 // API Routes
-// All tenant-specific routes require tenant middleware
-app.use("/api/auth", tenantMiddleware, authRoutes);
+// Auth routes are handled directly so login can support global super admin access
+app.use("/api/auth", authRoutes);
 app.use("/api/users", tenantMiddleware, userRoutes);
 app.use("/api/memberships", tenantMiddleware, membershipRoutes);
 app.use("/api/templates", tenantMiddleware, smartTemplateRoutes);
@@ -109,14 +128,25 @@ app.use("/api/churn-radar", tenantMiddleware, churnRoutes);
 app.use("/api/plans", tenantMiddleware, planRoutes);
 app.use("/api/attendance", tenantMiddleware, attendanceRoutes);
 app.use("/api/subscriptions", tenantMiddleware, subscriptionRoutes);
+app.use("/api/owner/packages", tenantMiddleware, ownerPackageRoutes);
+app.use("/api/owner/reports", tenantMiddleware, ownerReportsRoutes);
 app.use("/api/owner/metrics", tenantMiddleware, analyticsRoutes);
 app.use("/api/challenges", tenantMiddleware, challengeRoutes);
+app.use("/api/trainer/inbody", tenantMiddleware, trainerInbodyRoutes);
+app.use("/api/trainer/templates", tenantMiddleware, trainerTemplateRoutes);
+app.use("/api/trainer/classes", tenantMiddleware, trainerClassRoutes);
+app.use("/api/members", tenantMiddleware, memberRoutes);
 app.use("/api/wallet", tenantMiddleware, authMiddleware, walletRoutes);
 app.use("/api/workoutlogs", tenantMiddleware, workoutLogRoutes);
+app.use(
+  "/api/notifications",
+  tenantMiddleware,
+  authMiddleware,
+  notificationRoutes,
+);
+app.use("/api/broadcasts", tenantMiddleware, authMiddleware, broadcastRoutes);
 
-// Admin/Superadmin routes can be added here
-// app.use('/api/admin', adminRoutes);
-// app.use('/api/tenants', adminRoutes);
+app.use("/api/superadmin", superAdminRoutes);
 
 // 404 Handler
 app.use((req, res) => {
@@ -134,10 +164,10 @@ const PORT = config.port;
 const server = app.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════════════════════╗
-║     Gym Management SaaS Backend Server                 ║
-║     Server running on port: ${PORT}                        ║
-║     Environment: ${config.nodeEnv}                         ║
-║     Database: ${config.mongodbUri}                        ║
+║     Gym Management SaaS Backend Server                        ║
+║     Server running on port: ${PORT}                           ║
+║     Environment: ${config.nodeEnv}                             ║
+║     Database: ${config.nodeEnv === "production" ? "configured via env" : config.mongodbUri}                        ║
 ╚════════════════════════════════════════════════════════╝
   `);
 });
@@ -163,4 +193,20 @@ process.on("SIGTERM", () => {
   });
 });
 
-module.exports = app;
+if (process.env.ENABLE_SUBSCRIPTION_NOTIFICATION_JOB === "true") {
+  const runNotificationJob = async () => {
+    try {
+      await scanAllTenantExpirations();
+    } catch (error) {
+      console.error(
+        "Subscription notification job failed:",
+        error?.message || error,
+      );
+    }
+  };
+
+  runNotificationJob();
+  setInterval(runNotificationJob, 24 * 60 * 60 * 1000);
+}
+
+module.exports = { app, server };

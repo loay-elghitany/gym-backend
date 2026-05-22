@@ -1,5 +1,7 @@
 const User = require("../models/User");
+const Tenant = require("../models/Tenant");
 const jwt = require("jsonwebtoken");
+const config = require("../config/config");
 const { sendWelcomeMessage } = require("../services/telegramService");
 
 /**
@@ -8,9 +10,9 @@ const { sendWelcomeMessage } = require("../services/telegramService");
  */
 
 // Generate JWT Token
-const generateToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET || "your-secret-key", {
-    expiresIn: process.env.JWT_EXPIRE || "7d",
+const generateToken = (payload) => {
+  return jwt.sign(payload, config.jwtSecret, {
+    expiresIn: config.jwtExpire,
   });
 };
 
@@ -68,7 +70,7 @@ exports.register = async (req, res) => {
     }
 
     // Generate token
-    const token = generateToken(user._id);
+    const token = generateToken({ userId: user._id });
 
     // Remove password from response
     user.password = undefined;
@@ -96,7 +98,7 @@ exports.register = async (req, res) => {
 // @access  Public
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, tenantSlug: requestedTenantSlug } = req.body;
 
     // Validate input
     if (!email || !password) {
@@ -107,26 +109,108 @@ exports.login = async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    console.log("[Auth] Login attempt", {
-      tenantSlug: req.tenant ? req.tenant.slug : "none",
-      email: normalizedEmail,
-      route: req.originalUrl,
-    });
+    const normalizedTenantSlug =
+      requestedTenantSlug?.trim().toLowerCase() ||
+      req.headers["x-tenant-slug"]?.trim().toLowerCase();
 
-    // Find user in this tenant only
-    const user = await User.findOne({
-      email: normalizedEmail,
-      tenantId: req.tenant._id,
-    }).select("+password");
+    // Emergency Super Admin bypass for system tenant login.
+    if (requestedTenantSlug === "system" || normalizedTenantSlug === "system") {
+      const adminUser = await User.findOne({ email: normalizedEmail }).select(
+        "+password",
+      );
+      if (!adminUser) {
+        return res.status(401).json({
+          success: false,
+          message: "Super admin not found in DB.",
+        });
+      }
+
+      const isMatch = await adminUser.matchPassword(password);
+      if (!isMatch) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid credentials.",
+        });
+      }
+
+      adminUser.lastLogin = new Date();
+      await adminUser.save();
+
+      const token = generateToken({
+        userId: adminUser._id,
+        role: adminUser.role,
+        tenantId: adminUser.tenantId || "system",
+      });
+
+      adminUser.password = undefined;
+
+      return res.status(200).json({
+        success: true,
+        message: "Login successful",
+        data: {
+          user: adminUser,
+          token,
+        },
+      });
+    }
+
+    let tenant = null;
+    let user = null;
+
+    if (normalizedTenantSlug) {
+      // Allow explicit system tenant to bypass tenant document lookup and
+      // authenticate against the superadmin user directly.
+      if (normalizedTenantSlug === "system") {
+        // For the system tenant, query only by email so seeded superadmin
+        // records that don't include tenant fields can authenticate.
+        user = await User.findOne({ email: normalizedEmail }).select(
+          "+password",
+        );
+      } else {
+        tenant = await Tenant.findOne({ slug: normalizedTenantSlug });
+        if (!tenant) {
+          return res.status(401).json({
+            success: false,
+            message: "Invalid email or password",
+          });
+        }
+
+        // First try to find a tenant-scoped user
+        user = await User.findOne({
+          email: normalizedEmail,
+          tenantId: tenant._id,
+        }).select("+password");
+
+        // If not found in tenant, allow a superadmin account to authenticate
+        if (!user) {
+          user = await User.findOne({
+            email: normalizedEmail,
+            $or: [{ role: "superadmin" }, { role: "super_admin" }],
+          }).select("+password");
+        }
+      }
+    } else {
+      // No tenant requested: prefer any account if present (superadmin or global)
+      user = await User.findOne({
+        email: normalizedEmail,
+      }).select("+password");
+    }
 
     if (!user) {
       console.warn("[Auth] Login failed: user not found", {
         email: normalizedEmail,
-        tenantSlug: req.tenant.slug,
+        tenantSlug: normalizedTenantSlug || "none",
       });
       return res.status(401).json({
         success: false,
         message: "Invalid email or password",
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(401).json({
+        success: false,
+        message: "User account is inactive",
       });
     }
 
@@ -136,7 +220,7 @@ exports.login = async (req, res) => {
     if (!isPasswordValid) {
       console.warn("[Auth] Login failed: password mismatch", {
         email: normalizedEmail,
-        tenantSlug: req.tenant.slug,
+        tenantSlug: normalizedTenantSlug || "none",
       });
       return res.status(401).json({
         success: false,
@@ -148,17 +232,11 @@ exports.login = async (req, res) => {
     await user.save();
 
     // Generate token with role and tenant context
-    const token = jwt.sign(
-      {
-        userId: user._id,
-        role: user.role,
-        tenantId: user.tenantId,
-      },
-      process.env.JWT_SECRET || "your-secret-key",
-      {
-        expiresIn: process.env.JWT_EXPIRE || "7d",
-      },
-    );
+    const token = generateToken({
+      userId: user._id,
+      role: user.role,
+      tenantId: user.tenantId,
+    });
 
     // Remove password from response
     user.password = undefined;
@@ -186,7 +264,7 @@ exports.login = async (req, res) => {
 // @access  Private
 exports.getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user._id).select("-password");
 
     res.status(200).json({
       success: true,
