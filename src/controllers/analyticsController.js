@@ -1,13 +1,31 @@
-const Membership = require("../models/Membership");
 const User = require("../models/User");
 
-// GET /api/analytics/forecast
+const getBillingWindow = (req) => {
+  const now = new Date();
+  const startDate = req.query?.startDate
+    ? new Date(req.query.startDate)
+    : new Date(now.getFullYear(), now.getMonth(), 1);
+  const endDate = req.query?.endDate
+    ? new Date(req.query.endDate)
+    : new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+  if (Number.isNaN(startDate.getTime())) {
+    startDate.setTime(new Date(now.getFullYear(), now.getMonth(), 1).getTime());
+  }
+  if (Number.isNaN(endDate.getTime())) {
+    endDate.setTime(
+      new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime(),
+    );
+  }
+
+  return { startDate, endDate };
+};
+
 exports.getForecast = async (req, res, next) => {
   try {
-    const { tenantId } = req.tenant || {};
+    const tenantId = req.tenant?._id;
+    const { startDate } = getBillingWindow(req);
 
-    // Historical renewal rate: fraction of users with subscriptions still active
-    // among those who had an expiry in the past year. Simple approximation.
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
@@ -30,39 +48,51 @@ exports.getForecast = async (req, res, next) => {
       );
     }
 
-    // Find members whose subscriptions expire in the next 30 days
     const now = new Date();
     const in30 = new Date();
     in30.setDate(now.getDate() + 30);
 
-    const expiringUsers = await User.find({
-      tenantId,
-      "subscription.expiresAt": { $gte: now, $lte: in30 },
-      "subscription.status": "active",
-    }).select("subscription.planId subscription.expiresAt");
+    const expiringUsers = await User.aggregate([
+      {
+        $match: {
+          tenantId,
+          "subscription.status": "active",
+          "subscription.expiresAt": { $gte: now, $lte: in30 },
+        },
+      },
+      {
+        $lookup: {
+          from: "membershippackages",
+          localField: "subscription.packageId",
+          foreignField: "_id",
+          as: "package",
+        },
+      },
+      { $unwind: { path: "$package", preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          resolvedPrice: {
+            $cond: [
+              {
+                $gt: [{ $ifNull: ["$subscription.price", 0] }, 0],
+              },
+              "$subscription.price",
+              { $ifNull: ["$package.price", 0] },
+            ],
+          },
+        },
+      },
+    ]);
 
-    // Load membership prices for planIds
-    const planIds = [
-      ...new Set(expiringUsers.map((u) => String(u.subscription.planId))),
-    ].filter(Boolean);
-    const plans = await Membership.find({ _id: { $in: planIds } }).select(
-      "price",
+    const expectedRenewals = expiringUsers.reduce(
+      (sum, user) => sum + Number(user.resolvedPrice || 0) * renewalRate,
+      0,
     );
-    const priceMap = {};
-    plans.forEach((p) => (priceMap[String(p._id)] = p.price || 0));
 
-    // Expected revenue from renewals in next 30 days
-    const expectedRenewals = expiringUsers.reduce((sum, u) => {
-      const price = priceMap[String(u.subscription.planId)] || 0;
-      return sum + price * renewalRate;
-    }, 0);
-
-    // Build a simple daily forecast (linearized by splitting equally across 30 days)
-    const daily = Array.from({ length: 30 }).map((_, i) => {
+    const daily = Array.from({ length: 30 }).map((_, index) => {
+      const day = new Date(startDate.getTime() + index * 24 * 60 * 60 * 1000);
       return {
-        date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + i)
-          .toISOString()
-          .slice(0, 10),
+        date: day.toISOString().slice(0, 10),
         expected: expectedRenewals / 30,
       };
     });
@@ -76,6 +106,7 @@ exports.getForecast = async (req, res, next) => {
 exports.getOwnerMetrics = async (req, res) => {
   try {
     const now = new Date();
+    const billingWindow = getBillingWindow(req);
     const memberFilter = {
       tenantId: req.tenant._id,
       role: "member",
@@ -102,28 +133,45 @@ exports.getOwnerMetrics = async (req, res) => {
         $match: {
           ...memberFilter,
           "subscription.status": "active",
-          "subscription.expiresAt": { $gt: now },
-          "subscription.planId": { $exists: true, $ne: null },
+          "subscription.expiresAt": { $gt: billingWindow.startDate },
+          $or: [
+            { "subscription.startDate": { $exists: false } },
+            { "subscription.startDate": { $lte: billingWindow.endDate } },
+          ],
         },
       },
       {
         $lookup: {
-          from: "memberships",
-          localField: "subscription.planId",
+          from: "membershippackages",
+          localField: "subscription.packageId",
           foreignField: "_id",
-          as: "plan",
+          as: "package",
         },
       },
-      { $unwind: { path: "$plan", preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: "$package", preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          revenueAmount: {
+            $cond: [
+              {
+                $gt: [{ $ifNull: ["$subscription.price", 0] }, 0],
+              },
+              "$subscription.price",
+              { $ifNull: ["$package.price", 0] },
+            ],
+          },
+        },
+      },
       {
         $group: {
           _id: null,
-          revenue: { $sum: { $ifNull: ["$plan.price", 0] } },
+          revenue: { $sum: "$revenueAmount" },
         },
       },
     ]);
 
-    const monthlyRevenue = revenueData[0]?.revenue || 0;
+    const monthlyRevenue =
+      Math.round((revenueData[0]?.revenue || 0) * 100) / 100;
     const netProfit = Math.round(monthlyRevenue * 0.72 * 100) / 100;
     const revenueComparison = activeMembers
       ? Math.round(((activeSubscriptions / activeMembers) * 100 - 65) * 10) / 10

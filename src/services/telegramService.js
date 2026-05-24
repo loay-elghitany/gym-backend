@@ -5,9 +5,10 @@ const User = require("../models/User");
 const botToken = process.env.TELEGRAM_BOT_TOKEN;
 const defaultChatId = process.env.TELEGRAM_CHAT_ID;
 const isDev = process.env.NODE_ENV !== "production";
+const shouldStartPolling = botToken && process.env.NODE_ENV !== "test";
 
 let bot;
-if (botToken) {
+if (shouldStartPolling) {
   bot = new TelegramBot(botToken, { polling: true });
   bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
     const chatId = msg.chat.id;
@@ -69,6 +70,23 @@ const sendTelegramMessage = async (message, toChatId) => {
   }
 };
 
+const getAbsenceDays = (member) => {
+  const referenceDate = member?.lastAttendanceAt
+    ? new Date(member.lastAttendanceAt)
+    : member?.createdAt
+      ? new Date(member.createdAt)
+      : null;
+
+  if (!referenceDate || Number.isNaN(referenceDate.getTime())) {
+    return 0;
+  }
+
+  return Math.max(
+    0,
+    Math.floor((Date.now() - referenceDate.getTime()) / (1000 * 60 * 60 * 24)),
+  );
+};
+
 exports.sendWelcomeMessage = async (user, tenant) => {
   const message = `*New user registered*\n
 *Name:* ${user.name}
@@ -84,12 +102,22 @@ exports.sendExpiryReminder = async (tenant) => {
 };
 
 exports.sendInactiveMemberAlert = async (member, tenant) => {
-  const absenceDays = member.lastAttendanceAt
-    ? Math.floor(
-        (Date.now() - new Date(member.lastAttendanceAt).getTime()) /
-          (1000 * 60 * 60 * 24),
-      )
-    : "more than 10";
+  const absenceDays = getAbsenceDays(member);
   const message = `*Inactive Member Alert*\n\nName: ${member.name}\nEmail: ${member.email || "N/A"}\nDays absent: ${absenceDays}\nTenant: ${tenant.name} (${tenant.slug})\n\nPlease reach out and reactivate this member.`;
   return sendTelegramMessage(message);
 };
+
+exports.sendNewTraineeRegistrationNotification = async (
+  member,
+  tenant,
+  targetChatId,
+) => {
+  const packageName =
+    member.subscription?.packageType ||
+    member.subscription?.packageId?.name ||
+    "Standard Plan";
+  const message = `🔔 **متدرب جديد انضم للجيم!**\n- **الاسم:** ${member.name}\n- **الباقة:** ${packageName}\n- **التاريخ:** ${new Date().toLocaleDateString("en-GB")}`;
+  return sendTelegramMessage(message, targetChatId);
+};
+
+exports.sendTelegramMessage = sendTelegramMessage;

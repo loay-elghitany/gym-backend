@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const { sendTelegramMessage } = require("../services/telegramService");
 
 exports.getDashboard = async (req, res) => {
   try {
@@ -41,7 +42,9 @@ exports.notifyMember = async (req, res) => {
       _id: req.params.memberId,
       tenantId: req.tenant._id,
       role: "member",
-    }).select("name email");
+    })
+      .select("name email telegramChatId")
+      .lean();
 
     if (!member) {
       return res.status(404).json({
@@ -50,9 +53,21 @@ exports.notifyMember = async (req, res) => {
       });
     }
 
+    const owner = await User.findOne({
+      tenantId: req.tenant._id,
+      role: "gymowner",
+    })
+      .select("+telegramChatId")
+      .lean();
+
+    const ownerChatId = owner?.telegramChatId || undefined;
+    const message = `🔔 *Re-engagement reminder*\n\nName: ${member.name || member.email || "Member"}\nTenant: ${req.tenant.name} (${req.tenant.slug})\nPlease follow up with this member to recover attendance and revenue.`;
+
+    await sendTelegramMessage(message, ownerChatId);
+
     res.status(200).json({
       success: true,
-      message: `Re-engagement notification simulated for ${member.name || member.email}.`,
+      message: `Re-engagement notification sent to ${member.name || member.email}.`,
     });
   } catch (error) {
     console.error("OwnerReports notifyMember Error:", error);

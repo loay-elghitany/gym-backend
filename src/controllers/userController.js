@@ -1,6 +1,9 @@
 const User = require("../models/User");
 const MembershipPackage = require("../models/MembershipPackage");
 const InBodyRecord = require("../models/InBodyRecord");
+const {
+  sendNewTraineeRegistrationNotification,
+} = require("../services/telegramService");
 
 /**
  * User Controller
@@ -305,6 +308,8 @@ exports.createUser = async (req, res) => {
       tenantSlug: req.tenant.slug,
     };
 
+    let membershipPackage = null;
+
     if (normalizedRole === "member") {
       if (!packageId) {
         return res.status(400).json({
@@ -313,7 +318,7 @@ exports.createUser = async (req, res) => {
         });
       }
 
-      const membershipPackage = await MembershipPackage.findOne({
+      membershipPackage = await MembershipPackage.findOne({
         _id: packageId,
         tenantId: req.tenant._id,
         isActive: true,
@@ -352,6 +357,31 @@ exports.createUser = async (req, res) => {
     const newUser = new User(newUserData);
 
     await newUser.save();
+
+    if (normalizedRole === "member") {
+      try {
+        const owner = await User.findOne({
+          tenantId: req.tenant._id,
+          role: "gymowner",
+        }).select("+telegramChatId");
+
+        const notificationMember = newUser.toObject();
+        notificationMember.subscription = {
+          packageType: membershipPackage?.name || "Standard Plan",
+        };
+
+        await sendNewTraineeRegistrationNotification(
+          notificationMember,
+          req.tenant,
+          owner?.telegramChatId,
+        );
+      } catch (notificationError) {
+        console.warn(
+          "Telegram trainee registration notification failed:",
+          notificationError.message,
+        );
+      }
+    }
 
     res.status(201).json({
       success: true,

@@ -1,6 +1,56 @@
+const mongoose = require("mongoose");
 const CheckIn = require("../models/CheckIn");
 const User = require("../models/User");
 const { awardPoints } = require("../services/gamificationService");
+
+const calculateAttendanceStreak = (previousAttendance, previousStreak, now) => {
+  if (!previousAttendance) {
+    return 1;
+  }
+
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const startOfPrevious = new Date(previousAttendance);
+  startOfPrevious.setHours(0, 0, 0, 0);
+
+  const dayDifference = Math.round(
+    (startOfToday.getTime() - startOfPrevious.getTime()) /
+      (1000 * 60 * 60 * 24),
+  );
+
+  if (dayDifference === 1) {
+    return previousStreak + 1;
+  }
+
+  if (dayDifference === 0) {
+    return previousStreak || 1;
+  }
+
+  return 1;
+};
+
+const parseScanPayload = (payload) => {
+  if (!payload) {
+    throw new Error("QR payload is required");
+  }
+
+  let parsedPayload = payload;
+
+  if (typeof payload === "string") {
+    try {
+      parsedPayload = JSON.parse(payload);
+    } catch (error) {
+      throw new Error("Invalid QR payload format");
+    }
+  }
+
+  if (!parsedPayload || typeof parsedPayload !== "object") {
+    throw new Error("QR payload must be a JSON object");
+  }
+
+  return parsedPayload;
+};
 
 exports.checkIn = async (req, res) => {
   try {
@@ -62,24 +112,11 @@ exports.checkIn = async (req, res) => {
       ? new Date(previousUser.lastAttendanceAt)
       : null;
     const previousStreak = previousUser?.gamification?.attendanceStreak || 0;
-
-    let attendanceStreak = 1;
-    if (previousAttendance) {
-      const startOfToday = new Date(now);
-      startOfToday.setHours(0, 0, 0, 0);
-      const startOfPrevious = new Date(previousAttendance);
-      startOfPrevious.setHours(0, 0, 0, 0);
-      const dayDifference = Math.round(
-        (startOfToday.getTime() - startOfPrevious.getTime()) /
-          (1000 * 60 * 60 * 24),
-      );
-
-      if (dayDifference === 1) {
-        attendanceStreak = previousStreak + 1;
-      } else if (dayDifference === 0) {
-        attendanceStreak = previousStreak || 1;
-      }
-    }
+    const attendanceStreak = calculateAttendanceStreak(
+      previousAttendance,
+      previousStreak,
+      now,
+    );
 
     const updatedUser = await User.findOneAndUpdate(
       { _id: req.user._id, tenantId: req.tenant._id },
@@ -176,6 +213,103 @@ exports.checkIn = async (req, res) => {
       success: false,
       message: "Error creating check-in",
       error: error.message,
+    });
+  }
+};
+
+exports.scanAttendance = async (req, res) => {
+  try {
+    const parsedPayload = parseScanPayload(req.body?.payload || req.body);
+    const memberId = parsedPayload.memberId;
+
+    if (!memberId || !mongoose.Types.ObjectId.isValid(String(memberId))) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid memberId is required in the QR payload",
+      });
+    }
+
+    const payloadTenantSlug = String(
+      parsedPayload.tenantSlug || "",
+    ).toLowerCase();
+    const requestTenantSlug = String(req.tenant.slug).toLowerCase();
+
+    if (payloadTenantSlug && payloadTenantSlug !== requestTenantSlug) {
+      return res.status(403).json({
+        success: false,
+        message: "QR payload tenant does not match the current workspace",
+      });
+    }
+
+    const member = await User.findOne({
+      _id: memberId,
+      tenantId: req.tenant._id,
+      role: "member",
+      isActive: true,
+    });
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found in this workspace",
+      });
+    }
+
+    const now = new Date();
+    const previousAttendance = member.lastAttendanceAt
+      ? new Date(member.lastAttendanceAt)
+      : null;
+    const previousStreak = member.gamification?.attendanceStreak || 0;
+    const attendanceStreak = calculateAttendanceStreak(
+      previousAttendance,
+      previousStreak,
+      now,
+    );
+    const expiresAt = new Date(now.getTime() + 90 * 60 * 1000);
+
+    const checkIn = await CheckIn.create({
+      user: member._id,
+      tenantId: req.tenant._id,
+      status: "checked_in",
+      checkInAt: now,
+      expiresAt,
+      locationType: "gym",
+    });
+
+    const updatedUser = await User.findOneAndUpdate(
+      { _id: member._id, tenantId: req.tenant._id },
+      {
+        $set: {
+          lastAttendanceAt: now,
+          "gamification.attendanceStreak": attendanceStreak,
+        },
+        $push: {
+          attendanceHistory: {
+            date: now,
+            checkInType: "gym",
+          },
+        },
+      },
+      { new: true },
+    );
+
+    await awardPoints(member._id, req.tenant._id, 10, "Attendance check-in", {
+      attendanceStreak,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Attendance recorded successfully",
+      data: {
+        checkIn,
+        user: updatedUser,
+      },
+    });
+  } catch (error) {
+    console.error("ScanAttendance Error:", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Unable to scan attendance",
     });
   }
 };
