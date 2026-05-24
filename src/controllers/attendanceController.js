@@ -279,6 +279,22 @@ exports.scanAttendance = async (req, res) => {
         },
       });
     }
+    // Subscription/session handling: ensure limited packages have sessions remaining
+    const subscription = member.subscription || {};
+    const isLimited = subscription.membershipType === "limited";
+    let newRemainingSessions = null;
+
+    if (isLimited) {
+      const remaining = Number(subscription.remainingSessions || 0);
+      if (remaining <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Subscription expired: No sessions remaining.",
+          data: { name: member.name, planStatus: subscription.status || "unknown" },
+        });
+      }
+      newRemainingSessions = Math.max(remaining - 1, 0);
+    }
     const previousAttendance = member.lastAttendanceAt
       ? new Date(member.lastAttendanceAt)
       : null;
@@ -298,13 +314,16 @@ exports.scanAttendance = async (req, res) => {
       expiresAt,
       locationType: "gym",
     });
-
     const updatedUser = await User.findOneAndUpdate(
       { _id: member._id, tenantId: req.tenant._id },
       {
         $set: {
           lastAttendanceAt: now,
           "gamification.attendanceStreak": attendanceStreak,
+          ...(isLimited && {
+            "subscription.remainingSessions": newRemainingSessions,
+            "subscription.status": newRemainingSessions === 0 ? "expired" : subscription.status,
+          }),
         },
         $push: {
           attendanceHistory: {
