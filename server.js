@@ -58,7 +58,15 @@ app.use(
       ) {
         return callback(null, true);
       }
-
+// Allow ANY subdomain of mydoc90.com (The SaaS Magic 🪄)
+      try {
+        const url = new URL(origin);
+        if (url.hostname === "mydoc90.com" || url.hostname.endsWith(".mydoc90.com")) {
+          return callback(null, true);
+        }
+      } catch (err) {
+        // ignore invalid urls and fallthrough
+      }
       // Allow dynamic subdomains of localhost on port 5173 in development only.
       if (config.nodeEnv !== "production") {
         try {
