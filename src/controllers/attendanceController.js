@@ -290,7 +290,10 @@ exports.scanAttendance = async (req, res) => {
         return res.status(400).json({
           success: false,
           message: "Subscription expired: No sessions remaining.",
-          data: { name: member.name, planStatus: subscription.status || "unknown" },
+          data: {
+            name: member.name,
+            planStatus: subscription.status || "unknown",
+          },
         });
       }
       newRemainingSessions = Math.max(remaining - 1, 0);
@@ -322,7 +325,8 @@ exports.scanAttendance = async (req, res) => {
           "gamification.attendanceStreak": attendanceStreak,
           ...(isLimited && {
             "subscription.remainingSessions": newRemainingSessions,
-            "subscription.status": newRemainingSessions === 0 ? "expired" : subscription.status,
+            "subscription.status":
+              newRemainingSessions === 0 ? "expired" : subscription.status,
           }),
         },
         $push: {
@@ -378,7 +382,7 @@ exports.getPeakHours = async (req, res) => {
       },
       {
         $project: {
-          hour: { $hour: "$checkInAt" },
+          hour: { $hour: { date: "$checkInAt", timezone: "Africa/Cairo" } },
         },
       },
       {

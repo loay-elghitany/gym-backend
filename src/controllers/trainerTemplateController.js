@@ -1,6 +1,34 @@
 const mongoose = require("mongoose");
 const PlanTemplate = require("../models/PlanTemplate");
 
+const normalizeExercises = (exercises) => {
+  if (!Array.isArray(exercises)) {
+    return undefined;
+  }
+
+  return exercises
+    .map((exercise) => ({
+      name: String(exercise.name || "").trim(),
+      sets: Number(exercise.sets) || 0,
+      reps: String(exercise.reps || "").trim(),
+      notes: String(exercise.notes || "").trim(),
+    }))
+    .filter((exercise) => exercise.name !== "");
+};
+
+const normalizeMeals = (meals) => {
+  if (!Array.isArray(meals)) {
+    return undefined;
+  }
+
+  return meals
+    .map((meal) => ({
+      mealName: String(meal.mealName || meal || "").trim(),
+      description: String(meal.description || "").trim(),
+    }))
+    .filter((meal) => meal.mealName !== "");
+};
+
 exports.listTemplates = async (req, res) => {
   try {
     const templates = await PlanTemplate.find({
@@ -64,21 +92,8 @@ exports.createTemplate = async (req, res) => {
       });
     }
 
-    const normalizedExercises = Array.isArray(exercises)
-      ? exercises.map((exercise) => ({
-          name: String(exercise.name || "").trim(),
-          sets: Number(exercise.sets) || 0,
-          reps: String(exercise.reps || "").trim(),
-          notes: String(exercise.notes || "").trim(),
-        }))
-      : [];
-
-    const normalizedMeals = Array.isArray(meals)
-      ? meals.map((meal) => ({
-          mealName: String(meal.mealName || "").trim(),
-          description: String(meal.description || "").trim(),
-        }))
-      : [];
+    const normalizedExercises = normalizeExercises(exercises) || [];
+    const normalizedMeals = normalizeMeals(meals) || [];
 
     const template = await PlanTemplate.create({
       templateName: templateName.trim(),
@@ -96,6 +111,14 @@ exports.createTemplate = async (req, res) => {
     });
   } catch (error) {
     console.error("CreatePlanTemplate Error:", error);
+
+    if (error.name === "ValidationError") {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: "Error saving template",
@@ -114,13 +137,25 @@ exports.updateTemplate = async (req, res) => {
       });
     }
 
-    const updateData = {
-      ...req.body,
-    };
+    const updateData = {};
+
+    if (typeof req.body.templateName === "string") {
+      updateData.templateName = req.body.templateName.trim();
+    }
+
+    const normalizedExercises = normalizeExercises(req.body.exercises);
+    if (Object.prototype.hasOwnProperty.call(req.body, "exercises")) {
+      updateData.exercises = normalizedExercises;
+    }
+
+    const normalizedMeals = normalizeMeals(req.body.meals);
+    if (Object.prototype.hasOwnProperty.call(req.body, "meals")) {
+      updateData.meals = normalizedMeals;
+    }
 
     const template = await PlanTemplate.findOneAndUpdate(
       { _id: templateId, tenantId: req.tenant._id, isActive: true },
-      updateData,
+      { $set: updateData },
       { new: true, runValidators: true },
     );
 
@@ -138,6 +173,14 @@ exports.updateTemplate = async (req, res) => {
     });
   } catch (error) {
     console.error("UpdatePlanTemplate Error:", error);
+
+    if (error.name === "ValidationError") {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: "Error updating template",

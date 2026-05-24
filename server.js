@@ -58,10 +58,13 @@ app.use(
       ) {
         return callback(null, true);
       }
-// Allow ANY subdomain of mydoc90.com (The SaaS Magic 🪄)
+      // Allow ANY subdomain of mydoc90.com (The SaaS Magic 🪄)
       try {
         const url = new URL(origin);
-        if (url.hostname === "mydoc90.com" || url.hostname.endsWith(".mydoc90.com")) {
+        if (
+          url.hostname === "mydoc90.com" ||
+          url.hostname.endsWith(".mydoc90.com")
+        ) {
           return callback(null, true);
         }
       } catch (err) {
@@ -143,6 +146,7 @@ app.use("/api/challenges", tenantMiddleware, challengeRoutes);
 app.use("/api/trainer/inbody", tenantMiddleware, trainerInbodyRoutes);
 app.use("/api/trainer/templates", tenantMiddleware, trainerTemplateRoutes);
 app.use("/api/trainer/classes", tenantMiddleware, trainerClassRoutes);
+app.use("/api/member", tenantMiddleware, memberRoutes);
 app.use("/api/members", tenantMiddleware, memberRoutes);
 app.use("/api/wallet", tenantMiddleware, authMiddleware, walletRoutes);
 app.use("/api/workoutlogs", tenantMiddleware, workoutLogRoutes);

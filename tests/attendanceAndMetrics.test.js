@@ -169,4 +169,24 @@ describe("owner metrics and attendance scan", () => {
     expect(refreshedMember.lastAttendanceAt).toBeTruthy();
     expect(checkInCount).toBe(1);
   });
+
+  test("should group peak-hours using Africa/Cairo local time", async () => {
+    await CheckIn.create({
+      user: memberUser._id,
+      tenantId: tenant._id,
+      status: "checked_in",
+      checkInAt: new Date("2026-05-24T08:00:00.000Z"),
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    const response = await request(app)
+      .get("/api/attendance/peak-hours")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .set("x-tenant-slug", tenant.slug);
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.peakHours[11].count).toBe(1);
+    expect(response.body.data.peakHours[8].count).toBe(0);
+  });
 });
