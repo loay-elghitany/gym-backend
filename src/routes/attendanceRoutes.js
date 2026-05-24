@@ -11,6 +11,7 @@ router.use(authMiddleware);
 
 router.post("/check-in", checkIn);
 router.post("/scan", scanAttendance);
+router.post("/scan-qr", scanAttendance);
 router.get("/peak-hours", getPeakHours);
 
 module.exports = router;

@@ -9,7 +9,7 @@ const shouldStartPolling = botToken && process.env.NODE_ENV !== "test";
 
 let bot;
 if (shouldStartPolling) {
-  bot = new TelegramBot(botToken, { polling: true });
+  bot = new TelegramBot(botToken, { polling: false });
   bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
     const chatId = msg.chat.id;
     const rawUserId = match?.[1]?.trim();

@@ -256,6 +256,29 @@ exports.scanAttendance = async (req, res) => {
     }
 
     const now = new Date();
+    // timezone-aware day bounds using server local timezone (keeps existing behavior)
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date(startOfToday);
+    endOfToday.setDate(endOfToday.getDate() + 1);
+
+    // If the member already checked in today, return an explicit message
+    const alreadyCheckedIn = await CheckIn.findOne({
+      tenantId: req.tenant._id,
+      user: member._id,
+      checkInAt: { $gte: startOfToday, $lt: endOfToday },
+    });
+
+    if (alreadyCheckedIn) {
+      return res.status(400).json({
+        success: false,
+        message: "Already checked in",
+        data: {
+          name: member.name,
+          planStatus: member.subscription?.status || "unknown",
+        },
+      });
+    }
     const previousAttendance = member.lastAttendanceAt
       ? new Date(member.lastAttendanceAt)
       : null;
@@ -303,6 +326,8 @@ exports.scanAttendance = async (req, res) => {
       data: {
         checkIn,
         user: updatedUser,
+        name: member.name,
+        planStatus: member.subscription?.status || "unknown",
       },
     });
   } catch (error) {
