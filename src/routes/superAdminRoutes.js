@@ -13,6 +13,7 @@ const {
   updatePlan,
   getBroadcasts,
   createBroadcast,
+  deleteBroadcast,
   getAuditLogs,
   deleteGym,
   createGymOwner,
@@ -38,6 +39,7 @@ router.put("/plans/:id", updatePlan);
 
 router.get("/broadcasts", getBroadcasts);
 router.post("/broadcasts", createBroadcast);
+router.delete("/broadcasts/:id", deleteBroadcast);
 
 router.get("/audit-logs", getAuditLogs);
 

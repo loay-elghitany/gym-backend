@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Tenant = require("../models/Tenant");
 const User = require("../models/User");
 const SaaSPlan = require("../models/SaaSPlan");
@@ -827,6 +828,47 @@ exports.createBroadcast = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Unable to create broadcast",
+      error: error.message,
+    });
+  }
+};
+
+exports.deleteBroadcast = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id || !mongoose.Types.ObjectId.isValid(String(id))) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid broadcast id is required",
+      });
+    }
+
+    const broadcast = await Broadcast.findByIdAndDelete(id);
+
+    if (!broadcast) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Broadcast not found" });
+    }
+
+    await logAuditEvent({
+      action: "delete_broadcast",
+      actorId: req.user?._id,
+      actorName: req.user?.name,
+      targetId: id,
+      targetType: "broadcast",
+      details: { title: broadcast.title },
+    });
+
+    res
+      .status(200)
+      .json({ success: true, message: "Broadcast deleted successfully" });
+  } catch (error) {
+    console.error("SuperAdmin deleteBroadcast Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Unable to delete broadcast",
       error: error.message,
     });
   }
