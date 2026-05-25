@@ -23,10 +23,36 @@ const normalizeMeals = (meals) => {
   }
 
   return meals
-    .map((meal) => ({
-      mealName: String(meal.mealName || meal || "").trim(),
-      description: String(meal.description || "").trim(),
-    }))
+    .map((meal) => {
+      const quantity = Number(meal.quantity);
+      const calories =
+        meal.calories === undefined || meal.calories === null
+          ? null
+          : Number(meal.calories);
+      const protein =
+        meal.protein === undefined || meal.protein === null
+          ? null
+          : Number(meal.protein);
+      const carbs =
+        meal.carbs === undefined || meal.carbs === null
+          ? null
+          : Number(meal.carbs);
+      const fats =
+        meal.fats === undefined || meal.fats === null
+          ? null
+          : Number(meal.fats);
+
+      return {
+        mealName: String(meal.mealName || meal || "").trim(),
+        description: String(meal.description || "").trim(),
+        quantity: Number.isFinite(quantity) ? quantity : 0,
+        calories,
+        protein,
+        carbs,
+        fats,
+        baseUnit: String(meal.baseUnit || "100g").trim() || "100g",
+      };
+    })
     .filter((meal) => meal.mealName !== "");
 };
 

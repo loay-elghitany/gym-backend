@@ -15,6 +15,12 @@ const mealSchema = new mongoose.Schema(
   {
     mealName: { type: String, trim: true, required: true },
     description: { type: String, trim: true, default: "" },
+    quantity: { type: Number, min: 0, default: 0 },
+    calories: { type: Number, default: null },
+    protein: { type: Number, default: null },
+    carbs: { type: Number, default: null },
+    fats: { type: Number, default: null },
+    baseUnit: { type: String, trim: true, default: "100g" },
   },
   { _id: false },
 );
