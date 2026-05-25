@@ -6,6 +6,7 @@ const exerciseSchema = new mongoose.Schema(
     sets: { type: Number, min: 0, default: 0 },
     reps: { type: String, trim: true, default: "" },
     notes: { type: String, trim: true, default: "" },
+    gifUrl: { type: String, trim: true, default: "" },
   },
   { _id: false },
 );

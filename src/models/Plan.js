@@ -9,6 +9,7 @@ const exerciseSchema = new mongoose.Schema(
     rest: { type: String },
     instruction: { type: String, default: "" },
     videoUrl: { type: String, default: "" },
+    gifUrl: { type: String, default: "" },
   },
   { _id: false },
 );

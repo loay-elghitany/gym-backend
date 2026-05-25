@@ -12,6 +12,7 @@ const normalizeExercises = (exercises) => {
       sets: Number(exercise.sets) || 0,
       reps: String(exercise.reps || "").trim(),
       notes: String(exercise.notes || "").trim(),
+      gifUrl: String(exercise.gifUrl || "").trim(),
     }))
     .filter((exercise) => exercise.name !== "");
 };

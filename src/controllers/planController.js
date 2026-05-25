@@ -160,6 +160,7 @@ exports.createPlan = async (req, res) => {
           rest: exercise.rest,
           instruction: exercise.instruction || "",
           videoUrl: exercise.videoUrl || "",
+          gifUrl: exercise.gifUrl || "",
         }))
       : [];
 
