@@ -77,6 +77,22 @@ const tenantSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    landingPageConfig: {
+      type: Object,
+      default: {
+        heroTitle: "",
+        heroSubtitle: "",
+        aboutText: "",
+        themeColor: "#2563eb",
+        logoUrl: "",
+        coverUrl: "",
+        galleryUrls: [],
+        facebookUrl: "",
+        instagramUrl: "",
+        whatsappNumber: "",
+        isActive: false,
+      },
+    },
     status: {
       type: String,
       enum: ["active", "suspended"],

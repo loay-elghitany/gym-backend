@@ -34,6 +34,10 @@ const ownerPackageRoutes = require("./src/routes/ownerPackageRoutes");
 const ownerReportsRoutes = require("./src/routes/ownerReportsRoutes");
 const superAdminRoutes = require("./src/routes/superAdminRoutes");
 const {
+  publicLandingRouter,
+  protectedLandingRouter,
+} = require("./src/routes/landingRoutes");
+const {
   scanAllTenantExpirations,
 } = require("./src/services/subscriptionNotificationService");
 
@@ -162,6 +166,8 @@ app.use(
 );
 app.use("/api/broadcasts", tenantMiddleware, authMiddleware, broadcastRoutes);
 
+app.use("/api/landing", publicLandingRouter);
+app.use("/api/gym", protectedLandingRouter);
 app.use("/api/superadmin", superAdminRoutes);
 
 // 404 Handler
