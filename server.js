@@ -19,6 +19,7 @@ const planRoutes = require("./src/routes/planRoutes");
 const attendanceRoutes = require("./src/routes/attendanceRoutes");
 const subscriptionRoutes = require("./src/routes/subscriptionRoutes");
 const analyticsRoutes = require("./src/routes/analyticsRoutes");
+const reportsRoutes = require("./src/routes/reportsRoutes");
 const challengeRoutes = require("./src/routes/challengeRoutes");
 const walletRoutes = require("./src/routes/walletRoutes");
 const workoutLogRoutes = require("./src/routes/workoutLogRoutes");
@@ -175,6 +176,8 @@ app.use("/api/landing", publicLandingRouter);
 app.use("/api/landing", publicLeadRouter);
 app.use("/api/gym", protectedLandingRouter);
 app.use("/api/gym", protectedLeadRouter);
+// Gym reports (tenant-scoped)
+app.use("/api/gym/reports", tenantMiddleware, reportsRoutes);
 app.use("/api", weeklyCheckInRoutes);
 app.use("/api/superadmin", superAdminRoutes);
 

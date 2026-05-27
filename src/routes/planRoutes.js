@@ -4,6 +4,7 @@ const {
   getPlans,
   getPlanById,
   createPlan,
+  updatePlan,
 } = require("../controllers/planController");
 
 const router = express.Router();
@@ -19,5 +20,8 @@ router.get("/:id", getPlanById);
 
 // POST /api/plans - create new plan (trainer or gymowner)
 router.post("/", authorize("trainer", "gymowner", "superadmin"), createPlan);
+
+// PUT /api/plans/:id - update an existing plan
+router.put("/:id", authorize("trainer", "gymowner", "superadmin"), updatePlan);
 
 module.exports = router;

@@ -1,23 +1,95 @@
 const mongoose = require("mongoose");
 const PlanTemplate = require("../models/PlanTemplate");
 
+const normalizeExerciseItem = (exercise) => {
+  if (!exercise || typeof exercise !== "object") {
+    return null;
+  }
+
+  const name = String(exercise.name || "").trim();
+  if (!name) {
+    return null;
+  }
+
+  return {
+    name,
+    sets:
+      exercise.sets !== undefined && exercise.sets !== null
+        ? Number(exercise.sets)
+        : 0,
+    reps: String(exercise.reps || "").trim(),
+    notes: String(exercise.notes || "").trim(),
+    gifUrl: String(exercise.gifUrl || "").trim(),
+  };
+};
+
 const normalizeExercises = (exercises) => {
   if (!Array.isArray(exercises)) {
     return undefined;
   }
 
-  return exercises
-    .map((exercise) => {
-      const name = String(exercise.name || "").trim();
-      const sets = Number(exercise.sets) || 0;
-      const reps = String(exercise.reps || "").trim();
-      const notes = String(exercise.notes || "").trim();
-      const gif = String(exercise.gifUrl || "").trim();
-      const obj = { name, sets, reps, notes };
-      if (gif) obj.gifUrl = gif;
-      return obj;
-    })
-    .filter((exercise) => exercise.name !== "");
+  return exercises.map(normalizeExerciseItem).filter(Boolean);
+};
+
+const normalizeDays = (days, fallbackExercises = []) => {
+  const normalizedFallback = Array.isArray(fallbackExercises)
+    ? fallbackExercises.map(normalizeExerciseItem).filter(Boolean)
+    : [];
+
+  if (Array.isArray(days) && days.length) {
+    const normalized = days
+      .map((day, index) => {
+        if (!day || typeof day !== "object") {
+          return null;
+        }
+
+        const dayName = String(day.dayName || "").trim() || `Day ${index + 1}`;
+        const exercises = Array.isArray(day.exercises)
+          ? day.exercises.map(normalizeExerciseItem).filter(Boolean)
+          : [];
+
+        return exercises.length ? { dayName, exercises } : null;
+      })
+      .filter(Boolean);
+
+    return normalized.length
+      ? normalized
+      : normalizedFallback.length
+        ? [{ dayName: "Day 1", exercises: normalizedFallback }]
+        : [];
+  }
+
+  return normalizedFallback.length
+    ? [{ dayName: "Day 1", exercises: normalizedFallback }]
+    : [];
+};
+
+const flattenDays = (days) =>
+  Array.isArray(days)
+    ? days.flatMap((day) =>
+        Array.isArray(day.exercises)
+          ? day.exercises.map(normalizeExerciseItem).filter(Boolean)
+          : [],
+      )
+    : [];
+
+const normalizeTemplateResponse = (template) => {
+  if (!template) {
+    return template;
+  }
+
+  const rawTemplate =
+    typeof template.toObject === "function" ? template.toObject() : template;
+  const baseExercises = Array.isArray(rawTemplate.exercises)
+    ? rawTemplate.exercises.map(normalizeExerciseItem).filter(Boolean)
+    : [];
+  const days = normalizeDays(rawTemplate.days, baseExercises);
+
+  return {
+    ...rawTemplate,
+    days,
+    exercises: baseExercises.length ? baseExercises : flattenDays(days),
+  };
 };
 
 const normalizeMeals = (meals) => {
@@ -66,7 +138,10 @@ exports.listTemplates = async (req, res) => {
       isActive: true,
     }).sort({ createdAt: -1 });
 
-    res.status(200).json({ success: true, data: templates });
+    res.status(200).json({
+      success: true,
+      data: templates.map(normalizeTemplateResponse),
+    });
   } catch (error) {
     console.error("ListPlanTemplates Error:", error);
     res.status(500).json({
@@ -100,7 +175,10 @@ exports.getTemplateById = async (req, res) => {
       });
     }
 
-    res.status(200).json({ success: true, data: template });
+    res.status(200).json({
+      success: true,
+      data: normalizeTemplateResponse(template),
+    });
   } catch (error) {
     console.error("GetPlanTemplate Error:", error);
     res.status(500).json({
@@ -113,7 +191,7 @@ exports.getTemplateById = async (req, res) => {
 
 exports.createTemplate = async (req, res) => {
   try {
-    const { templateName, exercises, meals } = req.body;
+    const { templateName, days, exercises, meals } = req.body;
 
     if (!templateName || typeof templateName !== "string") {
       return res.status(400).json({
@@ -123,11 +201,15 @@ exports.createTemplate = async (req, res) => {
     }
 
     const normalizedExercises = normalizeExercises(exercises) || [];
+    const normalizedDays = normalizeDays(days, normalizedExercises);
     const normalizedMeals = normalizeMeals(meals) || [];
 
     const template = await PlanTemplate.create({
       templateName: templateName.trim(),
-      exercises: normalizedExercises,
+      exercises: normalizedDays.length
+        ? flattenDays(normalizedDays)
+        : normalizedExercises,
+      days: normalizedDays,
       meals: normalizedMeals,
       tenantId: req.tenant._id,
       tenantSlug: req.tenant.slug,
@@ -174,8 +256,17 @@ exports.updateTemplate = async (req, res) => {
     }
 
     const normalizedExercises = normalizeExercises(req.body.exercises);
-    if (Object.prototype.hasOwnProperty.call(req.body, "exercises")) {
-      updateData.exercises = normalizedExercises;
+    const normalizedDays = normalizeDays(
+      req.body.days,
+      normalizedExercises || [],
+    );
+
+    if (Object.prototype.hasOwnProperty.call(req.body, "days")) {
+      updateData.days = normalizedDays;
+      updateData.exercises = flattenDays(normalizedDays);
+    } else if (Object.prototype.hasOwnProperty.call(req.body, "exercises")) {
+      updateData.exercises = normalizedExercises || [];
+      updateData.days = normalizeDays(null, normalizedExercises || []);
     }
 
     const normalizedMeals = normalizeMeals(req.body.meals);

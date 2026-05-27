@@ -11,6 +11,14 @@ const exerciseSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const workoutDaySchema = new mongoose.Schema(
+  {
+    dayName: { type: String, required: true, trim: true },
+    exercises: { type: [exerciseSchema], default: [] },
+  },
+  { _id: false },
+);
+
 const mealSchema = new mongoose.Schema(
   {
     mealName: { type: String, trim: true, required: true },
@@ -34,6 +42,10 @@ const planTemplateSchema = new mongoose.Schema(
     },
     exercises: {
       type: [exerciseSchema],
+      default: [],
+    },
+    days: {
+      type: [workoutDaySchema],
       default: [],
     },
     meals: {
