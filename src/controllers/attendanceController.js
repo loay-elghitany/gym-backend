@@ -219,14 +219,10 @@ exports.checkIn = async (req, res) => {
 
 exports.scanAttendance = async (req, res) => {
   try {
-    console.log('ScanAttendance request body:', JSON.stringify(req.body));
     const parsedPayload = parseScanPayload(req.body?.payload || req.body);
-    console.log('ScanAttendance parsedPayload:', parsedPayload);
     const memberId = parsedPayload.memberId;
-    console.log('ScanAttendance memberId raw:', memberId, 'isValid:', mongoose.Types.ObjectId.isValid(String(memberId)));
 
     if (!memberId || !mongoose.Types.ObjectId.isValid(String(memberId))) {
-      console.log('ScanAttendance: invalid or missing memberId:', memberId);
       return res.status(400).json({
         success: false,
         message: "A valid memberId is required in the QR payload",
@@ -237,10 +233,8 @@ exports.scanAttendance = async (req, res) => {
       parsedPayload.tenantSlug || "",
     ).toLowerCase();
     const requestTenantSlug = String(req.tenant.slug).toLowerCase();
-    console.log('ScanAttendance tenantSlugs:', payloadTenantSlug, requestTenantSlug);
 
     if (payloadTenantSlug && payloadTenantSlug !== requestTenantSlug) {
-      console.log('ScanAttendance: tenant slug mismatch', payloadTenantSlug, requestTenantSlug);
       return res.status(403).json({
         success: false,
         message: "QR payload tenant does not match the current workspace",
@@ -254,9 +248,7 @@ exports.scanAttendance = async (req, res) => {
       isActive: true,
     });
 
-    console.log('ScanAttendance found member:', !!member);
     if (!member) {
-      console.log('ScanAttendance: member not found for id', memberId, 'tenant', req.tenant._id);
       return res.status(404).json({
         success: false,
         message: "Member not found in this workspace",
@@ -264,7 +256,6 @@ exports.scanAttendance = async (req, res) => {
     }
 
     const now = new Date();
-    console.log('ScanAttendance proceeding at', now);
     // timezone-aware day bounds using server local timezone (keeps existing behavior)
     const startOfToday = new Date(now);
     startOfToday.setHours(0, 0, 0, 0);
@@ -278,9 +269,7 @@ exports.scanAttendance = async (req, res) => {
       checkInAt: { $gte: startOfToday, $lt: endOfToday },
     });
 
-    console.log('ScanAttendance alreadyCheckedIn:', !!alreadyCheckedIn);
     if (alreadyCheckedIn) {
-      console.log('ScanAttendance: member already checked in today');
       return res.status(400).json({
         success: false,
         message: "Already checked in",

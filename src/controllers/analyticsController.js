@@ -191,6 +191,12 @@ exports.getOwnerMetrics = async (req, res) => {
       ],
     });
 
+    const newTraineesThisMonth = await User.countDocuments({
+      tenantId: req.tenant._id,
+      role: "member",
+      createdAt: { $gte: billingWindow.startDate },
+    });
+
     res.status(200).json({
       success: true,
       data: {
@@ -201,6 +207,7 @@ exports.getOwnerMetrics = async (req, res) => {
         revenueComparison,
         expiringSoon,
         churnRiskCount,
+        newTraineesThisMonth,
       },
     });
   } catch (error) {
