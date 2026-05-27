@@ -69,6 +69,7 @@ const authMiddleware = async (req, res, next) => {
       tenantSlug: user.tenantSlug,
       permissions: user.permissions,
       managedTenants: user.managedTenants,
+      subscription: user.subscription,
     };
 
     // Attach raw user document if needed

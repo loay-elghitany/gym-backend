@@ -38,6 +38,11 @@ const {
   protectedLandingRouter,
 } = require("./src/routes/landingRoutes");
 const {
+  publicLeadRouter,
+  protectedLeadRouter,
+} = require("./src/routes/leadRoutes");
+const weeklyCheckInRoutes = require("./src/routes/weeklyCheckInRoutes");
+const {
   scanAllTenantExpirations,
 } = require("./src/services/subscriptionNotificationService");
 
@@ -167,7 +172,10 @@ app.use(
 app.use("/api/broadcasts", tenantMiddleware, authMiddleware, broadcastRoutes);
 
 app.use("/api/landing", publicLandingRouter);
+app.use("/api/landing", publicLeadRouter);
 app.use("/api/gym", protectedLandingRouter);
+app.use("/api/gym", protectedLeadRouter);
+app.use("/api", weeklyCheckInRoutes);
 app.use("/api/superadmin", superAdminRoutes);
 
 // 404 Handler

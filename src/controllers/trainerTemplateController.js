@@ -7,13 +7,16 @@ const normalizeExercises = (exercises) => {
   }
 
   return exercises
-    .map((exercise) => ({
-      name: String(exercise.name || "").trim(),
-      sets: Number(exercise.sets) || 0,
-      reps: String(exercise.reps || "").trim(),
-      notes: String(exercise.notes || "").trim(),
-      gifUrl: String(exercise.gifUrl || "").trim(),
-    }))
+    .map((exercise) => {
+      const name = String(exercise.name || "").trim();
+      const sets = Number(exercise.sets) || 0;
+      const reps = String(exercise.reps || "").trim();
+      const notes = String(exercise.notes || "").trim();
+      const gif = String(exercise.gifUrl || "").trim();
+      const obj = { name, sets, reps, notes };
+      if (gif) obj.gifUrl = gif;
+      return obj;
+    })
     .filter((exercise) => exercise.name !== "");
 };
 

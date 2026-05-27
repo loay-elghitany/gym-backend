@@ -27,6 +27,7 @@ const workoutLogSchema = new mongoose.Schema(
         weight: Number,
         notes: String,
         totalVolume: Number, // sets * reps * weight
+        actualWeightLifts: [Number], // Array of actual weights lifted per set
       },
     ],
     totalVolume: {
