@@ -1,0 +1,9 @@
+{
+  "welcome_plain": "Welcome to the Gym Bot! Please use the link provided in your dashboard to link your account.",
+  "prompt_use_payload": "Please use /start <userId> to link your Gym account.",
+  "invalid_user_identifier": "Invalid user identifier provided.",
+  "user_not_found": "Unable to link account: user not found.",
+  "link_success": "Successfully linked to your Gym account! You will now receive Telegram notifications.",
+  "link_error": "There was an error linking your account. Please try again later.",
+  "unexpected_error": "An unexpected error occurred. Please try again later."
+}

@@ -1,6 +1,8 @@
 const TelegramBot = require("node-telegram-bot-api");
 const mongoose = require("mongoose");
 const User = require("../models/User");
+const enTranslations = require("../locales/en/telegram.json");
+const arTranslations = require("../locales/ar/telegram.json");
 
 const botToken = process.env.TELEGRAM_BOT_TOKEN;
 const defaultChatId = process.env.TELEGRAM_CHAT_ID;
@@ -9,46 +11,95 @@ const shouldStartPolling = botToken && process.env.NODE_ENV !== "test";
 
 let bot;
 if (shouldStartPolling) {
-  bot = new TelegramBot(botToken, { polling: false });
-  bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
-    const chatId = msg.chat.id;
-    const rawUserId = match?.[1]?.trim();
+  try {
+    bot = new TelegramBot(botToken, { polling: true });
 
-    if (!rawUserId) {
-      return bot.sendMessage(
-        chatId,
-        "Please use /start <userId> to link your Gym account.",
-      );
-    }
+    // Robust /start handler: only attempt DB linking when a payload is present.
+    bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
+      const chatId = msg.chat?.id;
+      try {
+        const rawPayload = match?.[1];
 
-    if (!mongoose.Types.ObjectId.isValid(rawUserId)) {
-      return bot.sendMessage(chatId, "Invalid user identifier provided.");
-    }
+        const langCode = msg.from?.language_code || "";
+        const lang = String(langCode).toLowerCase().startsWith("ar")
+          ? "ar"
+          : "en";
 
-    try {
-      const user = await User.findById(rawUserId);
-      if (!user) {
-        return bot.sendMessage(
-          chatId,
-          "Unable to link account: user not found.",
+        const t = (key) => {
+          if (lang === "ar")
+            return arTranslations[key] || enTranslations[key] || key;
+          return enTranslations[key] || arTranslations[key] || key;
+        };
+
+        // Plain /start with no payload -> graceful welcome message.
+        if (!rawPayload || String(rawPayload).trim() === "") {
+          return bot.sendMessage(chatId, t("welcome_plain"));
+        }
+
+        const rawUserId = String(rawPayload).trim();
+
+        // Only validate and query DB when there is a payload present.
+        if (!mongoose.Types.ObjectId.isValid(rawUserId)) {
+          return bot.sendMessage(chatId, t("invalid_user_identifier"));
+        }
+
+        try {
+          const user = await User.findById(rawUserId);
+          if (!user) {
+            return bot.sendMessage(chatId, t("user_not_found"));
+          }
+
+          user.telegramChatId = String(chatId);
+          await user.save();
+
+          await bot.sendMessage(chatId, t("link_success"));
+        } catch (dbErr) {
+          console.error(
+            "[TelegramService] DB error during /start linking:",
+            dbErr,
+          );
+          // Fail gracefully without crashing the process
+          try {
+            await bot.sendMessage(chatId, t("link_error"));
+          } catch (sendErr) {
+            console.error(
+              "[TelegramService] Failed to send error message to user:",
+              sendErr,
+            );
+          }
+        }
+      } catch (handlerErr) {
+        console.error(
+          "[TelegramService] /start handler unexpected error:",
+          handlerErr,
         );
+        try {
+          await bot.sendMessage(chatId, t("unexpected_error"));
+        } catch (sendErr) {
+          console.error(
+            "[TelegramService] Failed to notify user about unexpected error:",
+            sendErr,
+          );
+        }
       }
+    });
 
-      user.telegramChatId = String(chatId);
-      await user.save();
-
-      await bot.sendMessage(
-        chatId,
-        "Successfully linked to your Gym account! You will now receive Telegram notifications.",
-      );
-    } catch (error) {
-      console.error("[TelegramService] /start handler failed:", error);
-      bot.sendMessage(
-        chatId,
-        "There was an error linking your account. Please try again later.",
-      );
-    }
-  });
+    // Global bot error listeners to prevent silent failures
+    bot.on("polling_error", (err) =>
+      console.error("[TelegramService] Polling error:", err),
+    );
+    bot.on("webhook_error", (err) =>
+      console.error("[TelegramService] Webhook error:", err),
+    );
+    bot.on("error", (err) =>
+      console.error("[TelegramService] Bot error:", err),
+    );
+  } catch (initErr) {
+    console.error(
+      "[TelegramService] Failed to initialize Telegram bot:",
+      initErr,
+    );
+  }
 }
 
 const sendTelegramMessage = async (message, toChatId) => {
