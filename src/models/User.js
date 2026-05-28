@@ -94,6 +94,53 @@ const userSchema = new mongoose.Schema(
         },
       },
     },
+    progressPhotos: [
+      {
+        date: {
+          type: Date,
+          default: Date.now,
+        },
+        photoUrl: {
+          type: String,
+          required: true,
+        },
+        viewType: {
+          type: String,
+          enum: ["front", "back", "side", "other"],
+          default: "front",
+        },
+      },
+    ],
+    inBodyRecords: [
+      {
+        date: {
+          type: Date,
+          default: Date.now,
+        },
+        weight: {
+          type: Number,
+          min: 0,
+        },
+        fatPercentage: {
+          type: Number,
+          min: 0,
+          max: 100,
+        },
+        muscleMass: {
+          type: Number,
+          min: 0,
+        },
+        fileUrl: {
+          type: String,
+          default: null,
+        },
+        uploadedBy: {
+          type: String,
+          enum: ["trainer", "member"],
+          default: "trainer",
+        },
+      },
+    ],
     gamification: {
       attendanceStreak: {
         type: Number,

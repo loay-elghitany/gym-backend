@@ -219,7 +219,7 @@ exports.createTemplate = async (req, res) => {
     res.status(201).json({
       success: true,
       message: "Template saved successfully",
-      data: template,
+      data: normalizeTemplateResponse(template),
     });
   } catch (error) {
     console.error("CreatePlanTemplate Error:", error);
@@ -290,7 +290,7 @@ exports.updateTemplate = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Template updated successfully",
-      data: template,
+      data: normalizeTemplateResponse(template),
     });
   } catch (error) {
     console.error("UpdatePlanTemplate Error:", error);
