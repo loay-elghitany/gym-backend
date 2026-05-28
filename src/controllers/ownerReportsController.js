@@ -1,13 +1,42 @@
 const User = require("../models/User");
 const { sendTelegramMessage } = require("../services/telegramService");
+const mongoose = require("mongoose");
+
+const getFirstDayOfMonth = (date) =>
+  new Date(date.getFullYear(), date.getMonth(), 1);
 
 exports.getDashboard = async (req, res) => {
   try {
+    const tenantId = req.tenant?._id;
     const now = new Date();
-    const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-    const members = await User.find({
-      tenantId: req.tenant._id,
+    // Get all required metrics
+    const activeMembers = await User.countDocuments({
+      tenantId,
+      role: "member",
+      "subscription.status": "active",
+      "subscription.expiresAt": { $gt: now },
+    });
+
+    const monthStart = getFirstDayOfMonth(now);
+    const newTraineesThisMonth = await User.countDocuments({
+      tenantId,
+      role: "member",
+      createdAt: { $gte: monthStart },
+    });
+
+    const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const expiringSoon = await User.countDocuments({
+      tenantId,
+      role: "member",
+      "subscription.status": "active",
+      "subscription.expiresAt": { $gte: now, $lte: in7Days },
+    });
+
+    // Calculate expected 30-day revenue
+    const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const upcomingRenewals = await User.find({
+      tenantId,
       role: "member",
       "subscription.status": "active",
       "subscription.expiresAt": { $gte: now, $lte: in30Days },
@@ -15,15 +44,58 @@ exports.getDashboard = async (req, res) => {
       .select("subscription.price")
       .lean();
 
-    const expected30DayRevenue = members.reduce(
+    const expected30DayRevenue = upcomingRenewals.reduce(
       (sum, member) => sum + (Number(member.subscription?.price) || 0),
       0,
     );
 
+    // Monthly revenue (current month active subscriptions)
+    let monthlyRevenue = 0;
+    try {
+      const revenueData = await User.aggregate([
+        {
+          $match: {
+            tenantId: mongoose.Types.ObjectId(tenantId),
+            role: "member",
+            "subscription.status": "active",
+            "subscription.expiresAt": { $gt: monthStart },
+          },
+        },
+        {
+          $lookup: {
+            from: "membershippackages",
+            localField: "subscription.packageId",
+            foreignField: "_id",
+            as: "package",
+          },
+        },
+        { $unwind: { path: "$package", preserveNullAndEmptyArrays: true } },
+        {
+          $project: {
+            revenueAmount: {
+              $cond: [
+                { $gt: [{ $ifNull: ["$subscription.price", 0] }, 0] },
+                "$subscription.price",
+                { $ifNull: ["$package.price", 0] },
+              ],
+            },
+          },
+        },
+        { $group: { _id: null, revenue: { $sum: "$revenueAmount" } } },
+      ]);
+      monthlyRevenue = Math.round((revenueData[0]?.revenue || 0) * 100) / 100;
+    } catch (err) {
+      monthlyRevenue = 0;
+    }
+
     res.status(200).json({
       success: true,
       data: {
+        activeMembers,
+        newTraineesThisMonth,
+        expiringSoon,
         expected30DayRevenue,
+        monthlyRevenue,
       },
     });
   } catch (error) {

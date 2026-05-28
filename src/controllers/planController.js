@@ -109,12 +109,23 @@ const normalizePlanResponse = (plan) => {
     ? rawPlan.exercises.map(normalizeExerciseItem).filter(Boolean)
     : [];
 
-  const days = normalizeDays(rawPlan.days, baseExercises);
+  // Always prioritize days structure
+  let days = normalizeDays(rawPlan.days, baseExercises);
+
+  // If no days exist after normalization, ensure we create at least one day from exercises
+  if (!days || !days.length) {
+    if (baseExercises.length) {
+      days = [buildLegacyDay(baseExercises)];
+    } else {
+      days = [];
+    }
+  }
 
   return {
     ...rawPlan,
     days,
-    exercises: baseExercises.length ? baseExercises : flattenDays(days),
+    // Only include exercises for backward compatibility if days is empty
+    exercises: days.length > 0 ? [] : baseExercises,
   };
 };
 
@@ -268,6 +279,21 @@ exports.createPlan = async (req, res) => {
       : [];
 
     const normalizedDays = normalizeDays(days, normalizedExercises);
+
+    // Validate that plan has at least some exercises
+    const totalExercises = normalizedDays.reduce(
+      (total, day) =>
+        total + (Array.isArray(day.exercises) ? day.exercises.length : 0),
+      0,
+    );
+
+    if (!totalExercises && !normalizedExercises.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Please add at least one exercise to the plan",
+      });
+    }
+
     const flattenedExercises = flattenDays(normalizedDays);
 
     const planDocs = validIds.map((memberId) => ({
@@ -285,11 +311,12 @@ exports.createPlan = async (req, res) => {
     }));
 
     const createdPlans = await Plan.insertMany(planDocs);
+    const normalizedPlans = createdPlans.map(normalizePlanResponse);
 
     res.status(201).json({
       success: true,
       message: `Plan assigned to ${createdPlans.length} member(s)`,
-      data: { plans: createdPlans },
+      data: { plans: normalizedPlans },
     });
   } catch (error) {
     console.error("CreatePlan Error:", error);
