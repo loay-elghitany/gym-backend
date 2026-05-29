@@ -17,7 +17,7 @@ exports.getInBodyRecords = async (req, res) => {
       _id: memberId,
       tenantId: req.tenant._id,
       role: "member",
-    }).select("name email role");
+    }).select("name email role inBodyRecords progressPhotos");
 
     if (!member) {
       return res.status(404).json({
@@ -26,19 +26,53 @@ exports.getInBodyRecords = async (req, res) => {
       });
     }
 
-    const records = await InBodyRecord.find({
+    // Fetch trainer-added records from InBodyRecord collection
+    const trainerRecords = await InBodyRecord.find({
       memberId: member._id,
       tenantId: req.tenant._id,
     })
       .sort({ date: -1 })
       .lean();
 
+    // Transform trainer records to include source field
+    const trainerRecordsWithSource = trainerRecords.map((record) => ({
+      ...record,
+      source: "trainer",
+      uploadedBy: "trainer",
+    }));
+
+    // Transform member-uploaded records to match trainer record structure
+    const memberRecordsWithSource = (member.inBodyRecords || []).map(
+      (record) => ({
+        _id: record._id,
+        memberId: member._id,
+        weight: record.weight || 0,
+        skeletalMuscleMass: record.muscleMass || 0,
+        bodyFatMass: 0, // Not available in member uploads
+        bodyFatPercentage: record.fatPercentage || 0,
+        bmi: 0, // Not available in member uploads
+        bmr: 0, // Not available in member uploads
+        visceralFatLevel: 0, // Not available in member uploads
+        date: record.date,
+        source: "member",
+        uploadedBy: "member",
+        fileUrl: record.fileUrl || null,
+      }),
+    );
+
+    // Combine and sort by date (newest first)
+    const combinedRecords = [
+      ...trainerRecordsWithSource,
+      ...memberRecordsWithSource,
+    ].sort((a, b) => new Date(b.date) - new Date(a.date));
+
     res.status(200).json({
       success: true,
       data: {
         member,
-        records,
-        latestRecord: records[0] || null,
+        records: combinedRecords,
+        latestRecord: combinedRecords[0] || null,
+        progressPhotos: member.progressPhotos || [],
       },
     });
   } catch (error) {
