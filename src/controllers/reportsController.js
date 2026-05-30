@@ -83,7 +83,10 @@ exports.getGymReports = async (req, res, next) => {
     // recentActivity: 5 most recent registered or subscription activity
     const recentAgg = await User.aggregate([
       {
-        $match: { tenantId: new mongoose.Types.ObjectId(tenantId), role: "member" },
+        $match: {
+          tenantId: new mongoose.Types.ObjectId(tenantId),
+          role: "member",
+        },
       },
       {
         $project: {

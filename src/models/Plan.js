@@ -30,6 +30,27 @@ const dietNoteSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const foodItemSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    quantity: { type: Number, min: 0, default: 0 },
+    calories: { type: Number, default: null },
+    protein: { type: Number, default: null },
+    carbs: { type: Number, default: null },
+    fats: { type: Number, default: null },
+    baseUnit: { type: String, trim: true, default: "100g" },
+  },
+  { _id: false },
+);
+
+const mealSchema = new mongoose.Schema(
+  {
+    mealName: { type: String, required: true, trim: true },
+    foods: { type: [foodItemSchema], default: [] },
+  },
+  { _id: false },
+);
+
 const planSchema = new mongoose.Schema(
   {
     title: { type: String, required: true, trim: true },
@@ -37,6 +58,7 @@ const planSchema = new mongoose.Schema(
     exercises: { type: [exerciseSchema], default: [] },
     days: { type: [workoutDaySchema], default: [] },
     dietNotes: { type: [dietNoteSchema], default: [] },
+    meals: { type: [mealSchema], default: [] },
     assignedTo: [
       {
         type: mongoose.Schema.Types.ObjectId,

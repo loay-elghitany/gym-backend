@@ -92,6 +92,40 @@ const normalizeTemplateResponse = (template) => {
   };
 };
 
+const normalizeFoodItem = (food) => {
+  if (!food || typeof food !== "object") {
+    return null;
+  }
+
+  const name = String(food.name || food.foodName || food.item || "").trim();
+  if (!name) {
+    return null;
+  }
+
+  return {
+    name,
+    quantity:
+      food.quantity !== undefined && food.quantity !== null
+        ? Number(food.quantity)
+        : 0,
+    calories:
+      food.calories === undefined || food.calories === null
+        ? null
+        : Number(food.calories),
+    protein:
+      food.protein === undefined || food.protein === null
+        ? null
+        : Number(food.protein),
+    carbs:
+      food.carbs === undefined || food.carbs === null
+        ? null
+        : Number(food.carbs),
+    fats:
+      food.fats === undefined || food.fats === null ? null : Number(food.fats),
+    baseUnit: String(food.baseUnit || "100g").trim() || "100g",
+  };
+};
+
 const normalizeMeals = (meals) => {
   if (!Array.isArray(meals)) {
     return undefined;
@@ -99,36 +133,25 @@ const normalizeMeals = (meals) => {
 
   return meals
     .map((meal) => {
-      const quantity = Number(meal.quantity);
-      const calories =
-        meal.calories === undefined || meal.calories === null
-          ? null
-          : Number(meal.calories);
-      const protein =
-        meal.protein === undefined || meal.protein === null
-          ? null
-          : Number(meal.protein);
-      const carbs =
-        meal.carbs === undefined || meal.carbs === null
-          ? null
-          : Number(meal.carbs);
-      const fats =
-        meal.fats === undefined || meal.fats === null
-          ? null
-          : Number(meal.fats);
+      if (!meal || typeof meal !== "object") {
+        return null;
+      }
+
+      const mealName = String(meal.mealName || meal.name || "").trim();
+      if (!mealName) {
+        return null;
+      }
+
+      const foods = Array.isArray(meal.foods)
+        ? meal.foods.map(normalizeFoodItem).filter(Boolean)
+        : [];
 
       return {
-        mealName: String(meal.mealName || meal || "").trim(),
-        description: String(meal.description || "").trim(),
-        quantity: Number.isFinite(quantity) ? quantity : 0,
-        calories,
-        protein,
-        carbs,
-        fats,
-        baseUnit: String(meal.baseUnit || "100g").trim() || "100g",
+        mealName,
+        foods,
       };
     })
-    .filter((meal) => meal.mealName !== "");
+    .filter((meal) => meal && meal.foods.length);
 };
 
 exports.listTemplates = async (req, res) => {

@@ -85,15 +85,16 @@ exports.register = async (req, res) => {
     });
   } catch (error) {
     console.error("Register Error:", error);
-    
+
     // Handle MongoDB duplicate key error (E11000)
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
-        message: "This email is already registered in the system. Please use a different email.",
+        message:
+          "This email is already registered in the system. Please use a different email.",
       });
     }
-    
+
     res.status(500).json({
       success: false,
       message: "Error registering user",
@@ -294,17 +295,21 @@ exports.getMe = async (req, res) => {
 // @access  Private
 exports.updateProfile = async (req, res) => {
   try {
-    const { name, phone, avatar } = req.body;
+    const { name, phone, avatar, bio, specialty } = req.body;
 
-    const user = await User.findByIdAndUpdate(
-      req.user._id,
-      {
-        name: name || req.user.name,
-        phone: phone || req.user.phone,
-        avatar: avatar || req.user.avatar,
-      },
-      { new: true, runValidators: true },
-    );
+    const update = {
+      name: name || req.user.name,
+      phone: phone || req.user.phone,
+      avatar: avatar || req.user.avatar,
+    };
+
+    if (typeof bio === "string") update.bio = bio;
+    if (typeof specialty === "string") update.specialty = specialty;
+
+    const user = await User.findByIdAndUpdate(req.user._id, update, {
+      new: true,
+      runValidators: true,
+    });
 
     res.status(200).json({
       success: true,

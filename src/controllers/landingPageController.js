@@ -104,6 +104,57 @@ exports.getLandingPageData = async (req, res) => {
   }
 };
 
+exports.getLandingTrainers = async (req, res) => {
+  try {
+    const subdomain = String(req.params.subdomain || "")
+      .trim()
+      .toLowerCase();
+
+    if (!subdomain) {
+      return res
+        .status(400)
+        .json({ success: false, message: "A subdomain is required." });
+    }
+
+    const tenant = await Tenant.findOne({ slug: subdomain }).lean();
+
+    if (!tenant) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Gym not found." });
+    }
+
+    // Fetch trainers for this tenant. `avatar` exists on User model; `bio`/`specialty` may be empty.
+    const User = require("../models/User");
+    const trainers = await User.find({
+      tenantId: tenant._id,
+      role: "trainer",
+      isActive: true,
+    })
+      .select("name avatar bio specialty")
+      .sort({ name: 1 })
+      .lean();
+
+    const payload = trainers.map((t) => ({
+      _id: t._id,
+      name: t.name || "",
+      avatar: t.avatar || null,
+      bio: t.bio || t.specialty || "",
+    }));
+
+    return res.status(200).json({ success: true, data: payload });
+  } catch (error) {
+    console.error("GetLandingTrainers Error:", error);
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: "Unable to load trainers.",
+        error: error.message,
+      });
+  }
+};
+
 exports.updateLandingConfig = async (req, res) => {
   try {
     const currentTenant = await Tenant.findById(req.tenant._id).lean();

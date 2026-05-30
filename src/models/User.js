@@ -33,6 +33,18 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    bio: {
+      type: String,
+      trim: true,
+      maxlength: [150, "Bio cannot exceed 150 characters"],
+      default: "",
+    },
+    specialty: {
+      type: String,
+      trim: true,
+      maxlength: [80, "Specialty cannot exceed 80 characters"],
+      default: "",
+    },
     role: {
       type: String,
       enum: ["superadmin", "gymowner", "receptionist", "trainer", "member"],

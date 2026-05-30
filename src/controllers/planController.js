@@ -87,6 +87,68 @@ const normalizeDietNotes = (dietNotes) => {
     .filter((item) => item && item.item);
 };
 
+const normalizeMealFoodItem = (food) => {
+  if (!food || typeof food !== "object") {
+    return null;
+  }
+
+  const name = String(food.name || food.foodName || food.item || "").trim();
+  if (!name) {
+    return null;
+  }
+
+  return {
+    name,
+    quantity:
+      food.quantity !== undefined && food.quantity !== null
+        ? Number(food.quantity)
+        : 0,
+    calories:
+      food.calories === undefined || food.calories === null
+        ? null
+        : Number(food.calories),
+    protein:
+      food.protein === undefined || food.protein === null
+        ? null
+        : Number(food.protein),
+    carbs:
+      food.carbs === undefined || food.carbs === null
+        ? null
+        : Number(food.carbs),
+    fats:
+      food.fats === undefined || food.fats === null ? null : Number(food.fats),
+    baseUnit: String(food.baseUnit || "100g").trim() || "100g",
+  };
+};
+
+const normalizeMeals = (meals) => {
+  if (!Array.isArray(meals)) {
+    return undefined;
+  }
+
+  return meals
+    .map((meal, index) => {
+      if (!meal || typeof meal !== "object") {
+        return null;
+      }
+
+      const mealName = String(meal.mealName || meal.name || "").trim();
+      if (!mealName) {
+        return null;
+      }
+
+      const foods = Array.isArray(meal.foods)
+        ? meal.foods.map(normalizeMealFoodItem).filter(Boolean)
+        : [];
+
+      return {
+        mealName,
+        foods,
+      };
+    })
+    .filter((meal) => meal && meal.foods.length);
+};
+
 const flattenDays = (days) => {
   if (!Array.isArray(days)) {
     return [];
@@ -124,6 +186,7 @@ const normalizePlanResponse = (plan) => {
   return {
     ...rawPlan,
     days,
+    meals: Array.isArray(rawPlan.meals) ? rawPlan.meals : [],
     // Only include exercises for backward compatibility if days is empty
     exercises: days.length > 0 ? [] : baseExercises,
   };
@@ -232,6 +295,7 @@ exports.createPlan = async (req, res) => {
       days,
       exercises,
       dietNotes,
+      meals,
       memberIds,
       assignedTo = [],
       startDate,
@@ -273,6 +337,7 @@ exports.createPlan = async (req, res) => {
     }
 
     const normalizedDietNotes = normalizeDietNotes(dietNotes);
+    const normalizedMeals = normalizeMeals(meals) || [];
 
     const normalizedExercises = Array.isArray(exercises)
       ? exercises.map(normalizeExerciseItem).filter(Boolean)
@@ -302,6 +367,7 @@ exports.createPlan = async (req, res) => {
       exercises: flattenedExercises,
       days: normalizedDays,
       dietNotes: normalizedDietNotes,
+      meals: normalizedMeals,
       assignedTo: [memberId],
       createdBy: req.user._id,
       tenantId: req.tenant._id,
@@ -337,6 +403,7 @@ exports.updatePlan = async (req, res) => {
       days,
       exercises,
       dietNotes,
+      meals,
       startDate,
       endDate,
       isActive,
@@ -351,6 +418,9 @@ exports.updatePlan = async (req, res) => {
     }
     if (dietNotes !== undefined) {
       updateData.dietNotes = normalizeDietNotes(dietNotes);
+    }
+    if (meals !== undefined) {
+      updateData.meals = normalizeMeals(meals) || [];
     }
 
     const normalizedExercises = Array.isArray(exercises)

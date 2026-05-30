@@ -1,9 +1,23 @@
 const User = require("../models/User");
+const Plan = require("../models/Plan");
 const { sendTelegramMessage } = require("../services/telegramService");
 const mongoose = require("mongoose");
 
 const getFirstDayOfMonth = (date) =>
   new Date(date.getFullYear(), date.getMonth(), 1);
+
+const getCsvEscaped = (value) => {
+  const text = value === undefined || value === null ? "" : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+};
+
+const loadExcelJs = () => {
+  try {
+    return require("exceljs");
+  } catch (err) {
+    return null;
+  }
+};
 
 exports.getDashboard = async (req, res) => {
   try {
@@ -155,15 +169,43 @@ exports.exportMembers = async (req, res) => {
   try {
     const members = await User.find({
       tenantId: req.tenant._id,
+      role: "member",
     })
       .select("name email phone role createdAt lastAttendanceAt subscription")
       .populate("subscription.packageId", "name price")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
-    const escapeCsv = (value) => {
-      const text = value === undefined || value === null ? "" : String(value);
-      return `"${text.replace(/"/g, '""')}"`;
-    };
+    const memberIds = members.map((member) => member._id);
+    const activePlans = await Plan.find({
+      tenantId: req.tenant._id,
+      assignedTo: { $in: memberIds },
+      isActive: true,
+    })
+      .populate("createdBy", "name email")
+      .sort({ startDate: -1, updatedAt: -1, createdAt: -1 })
+      .lean();
+
+    const activePlanByMember = {};
+    activePlans.forEach((plan) => {
+      if (!Array.isArray(plan.assignedTo)) return;
+      const planTitle = plan.title || "Unnamed Plan";
+      const trainerName =
+        plan.createdBy?.name || plan.createdBy?.email || "Unassigned";
+      const planInfo = {
+        title: planTitle,
+        trainerName,
+        startDate: plan.startDate,
+        endDate: plan.endDate,
+      };
+
+      plan.assignedTo.forEach((assignedId) => {
+        const key = String(assignedId);
+        if (!activePlanByMember[key]) {
+          activePlanByMember[key] = planInfo;
+        }
+      });
+    });
 
     const rows = [
       [
@@ -171,6 +213,10 @@ exports.exportMembers = async (req, res) => {
         "Email",
         "Phone",
         "Role",
+        "Assigned Trainer",
+        "Active Plan Title",
+        "Active Plan Start",
+        "Active Plan End",
         "Join Date",
         "Current Package Name",
         "Package Price",
@@ -198,11 +244,23 @@ exports.exportMembers = async (req, res) => {
           ? new Date(member.lastAttendanceAt).toISOString().split("T")[0]
           : "N/A";
 
+        const planInfo = activePlanByMember[String(member._id)] || {};
+        const activePlanStart = planInfo.startDate
+          ? new Date(planInfo.startDate).toISOString().split("T")[0]
+          : "N/A";
+        const activePlanEnd = planInfo.endDate
+          ? new Date(planInfo.endDate).toISOString().split("T")[0]
+          : "N/A";
+
         return [
           member.name || "N/A",
           member.email || "N/A",
           member.phone || "N/A",
           member.role || "N/A",
+          planInfo.trainerName || "Unassigned",
+          planInfo.title || "No Active Plan",
+          activePlanStart,
+          activePlanEnd,
           joinedDate,
           packageName,
           packagePrice,
@@ -214,10 +272,38 @@ exports.exportMembers = async (req, res) => {
       }),
     ];
 
-    const csv = rows.map((row) => row.map(escapeCsv).join(",")).join("\n");
+    const workbookFormat = String(req.query.format || "").toLowerCase();
+    const exceljs = loadExcelJs();
 
+    if (workbookFormat === "xlsx" && exceljs) {
+      const workbook = new exceljs.Workbook();
+      const sheet = workbook.addWorksheet("Members Report");
+      sheet.addRows(rows);
+      sheet.columns.forEach((column) => {
+        if (typeof column.width !== "number") {
+          column.width = 22;
+        }
+      });
+      sheet.getRow(1).font = { bold: true };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      );
+      res.setHeader(
+        "Content-Disposition",
+        "attachment; filename=members-report.xlsx",
+      );
+      return res.status(200).send(buffer);
+    }
+
+    const csv = rows.map((row) => row.map(getCsvEscaped).join(",")).join("\n");
     res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", "attachment; filename=members.csv");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=members-report.csv",
+    );
     res.status(200).send(csv);
   } catch (error) {
     console.error("OwnerReports exportMembers Error:", error);

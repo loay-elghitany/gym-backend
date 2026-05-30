@@ -249,7 +249,7 @@ exports.updateHealthProfile = async (req, res) => {
 // @access  Private (GymOwner)
 exports.createUser = async (req, res) => {
   try {
-    const { name, email, password, role, phone, packageId } = req.body;
+    const { name, email, password, role, phone, packageId, bio, specialty } = req.body;
     const normalizedEmail = email?.trim().toLowerCase();
     const normalizedRole = role ? role.toLowerCase() : "member";
 
@@ -307,6 +307,10 @@ exports.createUser = async (req, res) => {
       tenantId: req.tenant._id,
       tenantSlug: req.tenant.slug,
     };
+
+    if (typeof bio === "string" && bio.trim()) newUserData.bio = bio.trim();
+    if (typeof specialty === "string" && specialty.trim())
+      newUserData.specialty = specialty.trim();
 
     let membershipPackage = null;
 
@@ -390,15 +394,16 @@ exports.createUser = async (req, res) => {
     });
   } catch (error) {
     console.error("CreateUser Error:", error);
-    
+
     // Handle MongoDB duplicate key error (E11000)
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
-        message: "This email is already registered in the system. Please use a different email.",
+        message:
+          "This email is already registered in the system. Please use a different email.",
       });
     }
-    
+
     res.status(500).json({
       success: false,
       message: "Error creating user",
@@ -412,7 +417,7 @@ exports.createUser = async (req, res) => {
 // @access  Private (GymOwner)
 exports.updateUser = async (req, res) => {
   try {
-    const { name, phone, role, isActive } = req.body;
+    const { name, phone, role, isActive, bio, specialty } = req.body;
 
     // Find and update user - CRITICAL: Verify tenant match
     const user = await User.findOneAndUpdate(
@@ -425,6 +430,8 @@ exports.updateUser = async (req, res) => {
         phone: phone || undefined,
         role: role || undefined,
         isActive: isActive !== undefined ? isActive : undefined,
+        ...(typeof bio === "string" ? { bio } : {}),
+        ...(typeof specialty === "string" ? { specialty } : {}),
       },
       { new: true, runValidators: true },
     ).select("-password");
