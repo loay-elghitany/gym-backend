@@ -39,7 +39,7 @@ exports.getGymReports = async (req, res, next) => {
     const growthAgg = await User.aggregate([
       {
         $match: {
-          tenantId: mongoose.Types.ObjectId(tenantId),
+          tenantId: new mongoose.Types.ObjectId(tenantId),
           role: "member",
           createdAt: { $gte: sixMonthsAgo },
         },
@@ -83,7 +83,7 @@ exports.getGymReports = async (req, res, next) => {
     // recentActivity: 5 most recent registered or subscription activity
     const recentAgg = await User.aggregate([
       {
-        $match: { tenantId: mongoose.Types.ObjectId(tenantId), role: "member" },
+        $match: { tenantId: new mongoose.Types.ObjectId(tenantId), role: "member" },
       },
       {
         $project: {
@@ -127,7 +127,7 @@ exports.getGymReports = async (req, res, next) => {
       const revenueData = await User.aggregate([
         {
           $match: {
-            tenantId: mongoose.Types.ObjectId(tenantId),
+            tenantId: new mongoose.Types.ObjectId(tenantId),
             role: "member",
             "subscription.status": "active",
             "subscription.expiresAt": { $gt: monthStart },

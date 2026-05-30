@@ -390,6 +390,15 @@ exports.createUser = async (req, res) => {
     });
   } catch (error) {
     console.error("CreateUser Error:", error);
+    
+    // Handle MongoDB duplicate key error (E11000)
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "This email is already registered in the system. Please use a different email.",
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: "Error creating user",

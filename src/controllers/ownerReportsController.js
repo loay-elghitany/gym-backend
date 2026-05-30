@@ -55,7 +55,7 @@ exports.getDashboard = async (req, res) => {
       const revenueData = await User.aggregate([
         {
           $match: {
-            tenantId: mongoose.Types.ObjectId(tenantId),
+            tenantId: new mongoose.Types.ObjectId(tenantId),
             role: "member",
             "subscription.status": "active",
             "subscription.expiresAt": { $gt: monthStart },
