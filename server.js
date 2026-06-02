@@ -107,6 +107,7 @@ app.use(
       "X-Requested-With",
     ],
     exposedHeaders: ["Authorization"],
+    optionsSuccessStatus: 200,
   }),
 );
 
