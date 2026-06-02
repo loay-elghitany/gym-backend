@@ -87,6 +87,7 @@ const tenantSchema = new mongoose.Schema(
         logoUrl: "",
         coverUrl: "",
         galleryUrls: [],
+        trainers: [],
         facebookUrl: "",
         instagramUrl: "",
         whatsappNumber: "",

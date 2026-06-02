@@ -9,11 +9,20 @@ const DEFAULT_LANDING_CONFIG = {
   logoUrl: "",
   coverUrl: "",
   galleryUrls: [],
+  trainers: [],
   facebookUrl: "",
   instagramUrl: "",
   whatsappNumber: "",
   isActive: false,
 };
+
+const normalizeTrainer = (trainer = {}) => ({
+  id: typeof trainer.id === "string" ? trainer.id.trim() : "",
+  name: typeof trainer.name === "string" ? trainer.name.trim() : "",
+  specialty: typeof trainer.specialty === "string" ? trainer.specialty.trim() : "",
+  bio: typeof trainer.bio === "string" ? trainer.bio.trim() : "",
+  imageUrl: typeof trainer.imageUrl === "string" ? trainer.imageUrl.trim() : "",
+});
 
 const normalizeLandingConfig = (config = {}) => ({
   heroTitle:
@@ -32,6 +41,11 @@ const normalizeLandingConfig = (config = {}) => ({
     ? config.galleryUrls
         .map((url) => (typeof url === "string" ? url.trim() : ""))
         .filter(Boolean)
+    : [],
+  trainers: Array.isArray(config.trainers)
+    ? config.trainers
+        .map((trainer) => normalizeTrainer(trainer))
+        .filter((t) => t.name)
     : [],
   facebookUrl:
     typeof config.facebookUrl === "string" ? config.facebookUrl.trim() : "",
@@ -200,6 +214,11 @@ exports.updateLandingConfig = async (req, res) => {
             .map((url) => (typeof url === "string" ? url.trim() : ""))
             .filter(Boolean)
         : currentConfig.galleryUrls,
+      trainers: Array.isArray(req.body.trainers)
+        ? req.body.trainers
+            .map((trainer) => normalizeTrainer(trainer))
+            .filter((t) => t.name)
+        : currentConfig.trainers,
       facebookUrl:
         typeof req.body.facebookUrl === "string"
           ? req.body.facebookUrl.trim()
