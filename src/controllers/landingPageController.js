@@ -19,7 +19,8 @@ const DEFAULT_LANDING_CONFIG = {
 const normalizeTrainer = (trainer = {}) => ({
   id: typeof trainer.id === "string" ? trainer.id.trim() : "",
   name: typeof trainer.name === "string" ? trainer.name.trim() : "",
-  specialty: typeof trainer.specialty === "string" ? trainer.specialty.trim() : "",
+  specialty:
+    typeof trainer.specialty === "string" ? trainer.specialty.trim() : "",
   bio: typeof trainer.bio === "string" ? trainer.bio.trim() : "",
   imageUrl: typeof trainer.imageUrl === "string" ? trainer.imageUrl.trim() : "",
 });
@@ -159,19 +160,17 @@ exports.getLandingTrainers = async (req, res) => {
     return res.status(200).json({ success: true, data: payload });
   } catch (error) {
     console.error("GetLandingTrainers Error:", error);
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: "Unable to load trainers.",
-        error: error.message,
-      });
+    return res.status(500).json({
+      success: false,
+      message: "Unable to load trainers.",
+      error: error.message,
+    });
   }
 };
 
 exports.updateLandingConfig = async (req, res) => {
   try {
-    const currentTenant = await Tenant.findById(req.tenant._id).lean();
+    const currentTenant = await Tenant.findById(req.tenant._id);
 
     if (!currentTenant) {
       return res.status(404).json({
@@ -183,6 +182,13 @@ exports.updateLandingConfig = async (req, res) => {
     const currentConfig = normalizeLandingConfig(
       currentTenant.landingPageConfig,
     );
+
+    // Explicitly extract trainers from req.body
+    const trainersFromRequest = Array.isArray(req.body.trainers)
+      ? req.body.trainers
+          .map((trainer) => normalizeTrainer(trainer))
+          .filter((t) => t.name)
+      : [];
 
     const payload = {
       heroTitle:
@@ -214,11 +220,10 @@ exports.updateLandingConfig = async (req, res) => {
             .map((url) => (typeof url === "string" ? url.trim() : ""))
             .filter(Boolean)
         : currentConfig.galleryUrls,
-      trainers: Array.isArray(req.body.trainers)
-        ? req.body.trainers
-            .map((trainer) => normalizeTrainer(trainer))
-            .filter((t) => t.name)
-        : currentConfig.trainers,
+      trainers:
+        trainersFromRequest.length > 0
+          ? trainersFromRequest
+          : currentConfig.trainers,
       facebookUrl:
         typeof req.body.facebookUrl === "string"
           ? req.body.facebookUrl.trim()
@@ -239,11 +244,11 @@ exports.updateLandingConfig = async (req, res) => {
 
     const landingPageConfig = normalizeLandingConfig(payload);
 
-    const updatedTenant = await Tenant.findByIdAndUpdate(
-      req.tenant._id,
-      { landingPageConfig },
-      { new: true, runValidators: true },
-    ).lean();
+    // Explicitly update the landingPageConfig field on the tenant document
+    currentTenant.landingPageConfig = landingPageConfig;
+
+    // Save the document
+    const updatedTenant = await currentTenant.save();
 
     if (!updatedTenant) {
       return res.status(404).json({
