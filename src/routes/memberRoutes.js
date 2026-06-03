@@ -8,6 +8,7 @@ const {
   uploadProgressPhoto,
   getMyProgressPhotos,
   deleteProgressPhoto,
+  deleteInBodyRecord,
   uploadInBodyRecord,
   getMyInBodyRecordsExtended,
   getMemberProgress,
@@ -28,6 +29,7 @@ router.delete("/progress-photos/:photoId", deleteProgressPhoto);
 // InBody records (member uploads)
 router.post("/inbody-records", uploadInBodyRecord);
 router.get("/inbody-records", getMyInBodyRecordsExtended);
+router.delete("/inbody-records/:recordId", deleteInBodyRecord);
 
 // Leaderboard
 router.get("/leaderboard", getLeaderboard);

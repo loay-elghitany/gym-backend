@@ -1,5 +1,6 @@
 const WeeklyCheckIn = require("../models/WeeklyCheckIn");
 const User = require("../models/User");
+const { isValidCloudinaryUrl, normalizeCloudinaryUrl } = require("../utils/cloudinaryValidator");
 
 // Create a weekly check-in (Trainee)
 exports.createWeeklyCheckIn = async (req, res) => {
@@ -29,7 +30,10 @@ exports.createWeeklyCheckIn = async (req, res) => {
 
     // Verify trainer exists and belongs to same tenant
     const trainer = await User.findById(assignedTrainerId);
-    if (!trainer || trainer.tenantId.toString() !== trainee.tenantId.toString()) {
+    if (
+      !trainer ||
+      trainer.tenantId.toString() !== trainee.tenantId.toString()
+    ) {
       return res.status(400).json({
         success: false,
         message: "Invalid trainer",
@@ -40,7 +44,9 @@ exports.createWeeklyCheckIn = async (req, res) => {
     const date = new Date();
     const startOfYear = new Date(date.getFullYear(), 0, 1);
     const pastDaysOfYear = (date - startOfYear) / 86400000;
-    const weekNumber = Math.ceil((pastDaysOfYear + startOfYear.getDay() + 1) / 7);
+    const weekNumber = Math.ceil(
+      (pastDaysOfYear + startOfYear.getDay() + 1) / 7,
+    );
     const year = date.getFullYear();
 
     const existingCheckIn = await WeeklyCheckIn.findOne({
@@ -51,11 +57,34 @@ exports.createWeeklyCheckIn = async (req, res) => {
 
     if (existingCheckIn) {
       // Update existing check-in
-      existingCheckIn.currentWeight = currentWeight || existingCheckIn.currentWeight;
-      existingCheckIn.fatigueLevel = fatigueLevel || existingCheckIn.fatigueLevel;
+      existingCheckIn.currentWeight =
+        currentWeight || existingCheckIn.currentWeight;
+      existingCheckIn.fatigueLevel =
+        fatigueLevel || existingCheckIn.fatigueLevel;
       existingCheckIn.notes = notes || existingCheckIn.notes;
       if (photos && photos.length > 0) {
-        existingCheckIn.photos = photos;
+        // Normalize photos to objects { url, viewType, uploadedAt } and validate Cloudinary URLs
+        existingCheckIn.photos = photos
+          .map((p) => {
+            if (!p) return null;
+            if (typeof p === "string") {
+              const su = normalizeCloudinaryUrl(p);
+              if (!isValidCloudinaryUrl(su)) return null;
+              return { url: su, viewType: "front", uploadedAt: new Date() };
+            }
+            // support frontend shape { photoUrl, viewType }
+            if (p.photoUrl || p.url) {
+              const su = normalizeCloudinaryUrl(p.photoUrl || p.url);
+              if (!isValidCloudinaryUrl(su)) return null;
+              return {
+                url: su,
+                viewType: p.viewType || p.view || "front",
+                uploadedAt: p.uploadedAt ? new Date(p.uploadedAt) : new Date(),
+              };
+            }
+            return null;
+          })
+          .filter(Boolean);
       }
       await existingCheckIn.save();
       return res.status(200).json({
@@ -66,6 +95,29 @@ exports.createWeeklyCheckIn = async (req, res) => {
     }
 
     // Create new check-in
+    const normalizedPhotos = Array.isArray(photos)
+      ? photos
+          .map((p) => {
+            if (!p) return null;
+            if (typeof p === "string") {
+              const su = normalizeCloudinaryUrl(p);
+              if (!isValidCloudinaryUrl(su)) return null;
+              return { url: su, viewType: "front", uploadedAt: new Date() };
+            }
+            if (p.photoUrl || p.url) {
+              const su = normalizeCloudinaryUrl(p.photoUrl || p.url);
+              if (!isValidCloudinaryUrl(su)) return null;
+              return {
+                url: su,
+                viewType: p.viewType || p.view || "front",
+                uploadedAt: p.uploadedAt ? new Date(p.uploadedAt) : new Date(),
+              };
+            }
+            return null;
+          })
+          .filter(Boolean)
+      : [];
+
     const checkIn = await WeeklyCheckIn.create({
       traineeId,
       trainerId: assignedTrainerId,
@@ -74,7 +126,7 @@ exports.createWeeklyCheckIn = async (req, res) => {
       currentWeight,
       fatigueLevel,
       notes,
-      photos,
+      photos: normalizedPhotos,
       weekNumber,
       year,
     });

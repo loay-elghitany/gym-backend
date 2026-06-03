@@ -11,7 +11,7 @@ router.get(
   analyticsController.getForecast,
 );
 router.get(
-  "/metrics",
+  "/",
   authorize("gymowner", "superadmin"),
   analyticsController.getOwnerMetrics,
 );

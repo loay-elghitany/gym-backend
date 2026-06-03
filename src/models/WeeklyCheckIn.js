@@ -41,7 +41,13 @@ const weeklyCheckInSchema = new mongoose.Schema(
     },
     photos: [
       {
-        type: String,
+        url: { type: String, required: true },
+        viewType: {
+          type: String,
+          enum: ["front", "back", "side", "other"],
+          default: "front",
+        },
+        uploadedAt: { type: Date, default: Date.now },
       },
     ],
     weekNumber: {
@@ -63,7 +69,7 @@ const weeklyCheckInSchema = new mongoose.Schema(
   {
     timestamps: true,
     collection: "weeklycheckins",
-  }
+  },
 );
 
 // Index for faster queries
@@ -76,7 +82,9 @@ weeklyCheckInSchema.pre("save", function (next) {
     const date = this.createdAt || new Date();
     const startOfYear = new Date(date.getFullYear(), 0, 1);
     const pastDaysOfYear = (date - startOfYear) / 86400000;
-    this.weekNumber = Math.ceil((pastDaysOfYear + startOfYear.getDay() + 1) / 7);
+    this.weekNumber = Math.ceil(
+      (pastDaysOfYear + startOfYear.getDay() + 1) / 7,
+    );
     this.year = date.getFullYear();
   }
   next();

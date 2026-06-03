@@ -19,4 +19,17 @@ router.post(
   createInBodyRecord,
 );
 
+// Trainer can delete member photos and records
+router.delete(
+  "/photos/:memberId/:photoId",
+  authorize("trainer", "gymowner", "superadmin"),
+  require("../controllers/trainerInbodyController").deleteMemberProgressPhoto,
+);
+
+router.delete(
+  "/records/:memberId/:recordId",
+  authorize("trainer", "gymowner", "superadmin"),
+  require("../controllers/trainerInbodyController").deleteMemberInBodyRecord,
+);
+
 module.exports = router;

@@ -19,7 +19,12 @@ const normalizeExerciseItem = (exercise) => {
         : 0,
     reps: String(exercise.reps || "").trim(),
     notes: String(exercise.notes || "").trim(),
-    gifUrl: String(exercise.gifUrl || "").trim(),
+    ...(exercise.gifUrl !== undefined && exercise.gifUrl !== null
+      ? (() => {
+          const g = String(exercise.gifUrl || "").trim();
+          return g ? { gifUrl: g } : {};
+        })()
+      : {}),
   };
 };
 
@@ -84,10 +89,17 @@ const normalizeTemplateResponse = (template) => {
     ? rawTemplate.exercises.map(normalizeExerciseItem).filter(Boolean)
     : [];
   const days = normalizeDays(rawTemplate.days, baseExercises);
+  const meals = Array.isArray(rawTemplate.meals)
+    ? rawTemplate.meals.map((m) => ({
+        mealName: String(m.mealName || "").trim(),
+        description: "",
+      }))
+    : [];
 
   return {
     ...rawTemplate,
     days,
+    meals,
     exercises: baseExercises.length ? baseExercises : flattenDays(days),
   };
 };
@@ -130,28 +142,26 @@ const normalizeMeals = (meals) => {
   if (!Array.isArray(meals)) {
     return undefined;
   }
-
   return meals
     .map((meal) => {
-      if (!meal || typeof meal !== "object") {
-        return null;
+      if (!meal) return null;
+
+      if (typeof meal === "string") {
+        const mealName = String(meal).trim();
+        return mealName ? { mealName, description: "" } : null;
       }
+
+      if (typeof meal !== "object") return null;
 
       const mealName = String(meal.mealName || meal.name || "").trim();
       if (!mealName) {
         return null;
       }
 
-      const foods = Array.isArray(meal.foods)
-        ? meal.foods.map(normalizeFoodItem).filter(Boolean)
-        : [];
-
-      return {
-        mealName,
-        foods,
-      };
+      // Normalize to simple meal objects with description for templates
+      return { mealName, description: String(meal.description || "").trim() };
     })
-    .filter((meal) => meal && meal.foods.length);
+    .filter(Boolean);
 };
 
 exports.listTemplates = async (req, res) => {

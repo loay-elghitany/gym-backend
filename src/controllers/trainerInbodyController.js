@@ -2,6 +2,70 @@ const mongoose = require("mongoose");
 const InBodyRecord = require("../models/InBodyRecord");
 const User = require("../models/User");
 
+// Delete a member's progress photo (trainer action)
+exports.deleteMemberProgressPhoto = async (req, res) => {
+  try {
+    const { memberId, photoId } = req.params;
+    if (!memberId || !mongoose.Types.ObjectId.isValid(memberId)) {
+      return res.status(400).json({ success: false, message: "Invalid member ID" });
+    }
+    if (!photoId) {
+      return res.status(400).json({ success: false, message: "Photo ID required" });
+    }
+
+    const user = await User.findOneAndUpdate(
+      { _id: memberId, tenantId: req.tenant._id },
+      { $pull: { progressPhotos: { _id: photoId } } },
+      { new: true }
+    ).select("progressPhotos");
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Member not found" });
+    }
+
+    res.status(200).json({ success: true, message: "Photo deleted", data: user.progressPhotos });
+  } catch (error) {
+    console.error("DeleteMemberProgressPhoto Error:", error);
+    res.status(500).json({ success: false, message: "Error deleting photo", error: error.message });
+  }
+};
+
+// Delete an inbody record for a member (trainer action) - handles both member-embedded and trainer-created docs
+exports.deleteMemberInBodyRecord = async (req, res) => {
+  try {
+    const { memberId, recordId } = req.params;
+    if (!memberId || !mongoose.Types.ObjectId.isValid(memberId)) {
+      return res.status(400).json({ success: false, message: "Invalid member ID" });
+    }
+    if (!recordId) {
+      return res.status(400).json({ success: false, message: "Record ID required" });
+    }
+
+    // Try pulling from user's embedded inBodyRecords first
+    const user = await User.findOneAndUpdate(
+      { _id: memberId, tenantId: req.tenant._id },
+      { $pull: { inBodyRecords: { _id: recordId } } },
+      { new: true }
+    ).select("inBodyRecords");
+
+    if (user && user.inBodyRecords) {
+      // If the pull succeeded and record is gone, return updated list
+      return res.status(200).json({ success: true, message: "Member inBody record deleted", data: user.inBodyRecords });
+    }
+
+    // Fallback: try deleting from InBodyRecord collection (trainer-created)
+    const deleted = await InBodyRecord.findOneAndDelete({ _id: recordId, memberId, tenantId: req.tenant._id });
+    if (deleted) {
+      return res.status(200).json({ success: true, message: "Trainer inBody record deleted", data: deleted });
+    }
+
+    res.status(404).json({ success: false, message: "Record not found" });
+  } catch (error) {
+    console.error("DeleteMemberInBodyRecord Error:", error);
+    res.status(500).json({ success: false, message: "Error deleting record", error: error.message });
+  }
+};
+
 exports.getInBodyRecords = async (req, res) => {
   try {
     const { memberId } = req.params;

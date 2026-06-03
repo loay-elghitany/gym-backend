@@ -50,6 +50,17 @@ const inBodyRecordSchema = new mongoose.Schema(
       min: 0,
       default: 0,
     },
+    // Optional scan image stored in Cloudinary
+    scanImageUrl: {
+      type: String,
+      default: null,
+    },
+    // Make muscle mass more explicit in schema (keeps existing skeletalMuscleMass for compatibility)
+    muscleMass: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
     date: {
       type: Date,
       required: [true, "Date is required"],

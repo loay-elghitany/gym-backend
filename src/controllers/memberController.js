@@ -69,6 +69,8 @@ exports.getExpiringMembers = async (req, res) => {
   }
 };
 
+const { isValidCloudinaryUrl, normalizeCloudinaryUrl } = require("../utils/cloudinaryValidator");
+
 // Upload progress photos
 exports.uploadProgressPhoto = async (req, res) => {
   try {
@@ -88,9 +90,14 @@ exports.uploadProgressPhoto = async (req, res) => {
       });
     }
 
+    const safeUrl = normalizeCloudinaryUrl(photoUrl);
+    if (!isValidCloudinaryUrl(safeUrl)) {
+      return res.status(400).json({ success: false, message: "Invalid photo URL" });
+    }
+
     const progressPhoto = {
       date: new Date(),
-      photoUrl: photoUrl.trim(),
+      photoUrl: safeUrl,
       viewType,
     };
 
@@ -179,6 +186,11 @@ exports.uploadInBodyRecord = async (req, res) => {
       });
     }
 
+    const safeFileUrl = fileUrl ? normalizeCloudinaryUrl(fileUrl) : null;
+    if (safeFileUrl && !isValidCloudinaryUrl(safeFileUrl)) {
+      return res.status(400).json({ success: false, message: "Invalid scan file URL" });
+    }
+
     const inBodyRecord = {
       date: new Date(),
       weight: Number(weight),
@@ -190,7 +202,7 @@ exports.uploadInBodyRecord = async (req, res) => {
         muscleMass !== undefined && muscleMass !== null
           ? Number(muscleMass)
           : null,
-      fileUrl: fileUrl ? fileUrl.trim() : null,
+      fileUrl: safeFileUrl,
       uploadedBy: "member",
     };
 
@@ -231,6 +243,31 @@ exports.getMyInBodyRecordsExtended = async (req, res) => {
       message: "Error fetching InBody records",
       error: error.message,
     });
+  }
+};
+
+// Delete an InBody record (member-owned)
+exports.deleteInBodyRecord = async (req, res) => {
+  try {
+    const { recordId } = req.params;
+    if (!recordId) {
+      return res.status(400).json({ success: false, message: "Record ID required" });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { $pull: { inBodyRecords: { _id: recordId } } },
+      { new: true }
+    ).select("inBodyRecords");
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    res.status(200).json({ success: true, message: "InBody record deleted", data: user.inBodyRecords });
+  } catch (error) {
+    console.error("DeleteInBodyRecord Error:", error);
+    res.status(500).json({ success: false, message: "Error deleting record", error: error.message });
   }
 };
 

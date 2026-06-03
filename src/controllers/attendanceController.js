@@ -223,6 +223,7 @@ exports.scanAttendance = async (req, res) => {
     const memberId = parsedPayload.memberId;
 
     if (!memberId || !mongoose.Types.ObjectId.isValid(String(memberId))) {
+      console.log("ScanAttendance invalid memberId", memberId);
       return res.status(400).json({
         success: false,
         message: "A valid memberId is required in the QR payload",
@@ -270,6 +271,13 @@ exports.scanAttendance = async (req, res) => {
     });
 
     if (alreadyCheckedIn) {
+      console.log("ScanAttendance already checked in", {
+        memberId: member._id.toString(),
+        checkInId: alreadyCheckedIn._id.toString(),
+        now,
+        startOfToday,
+        endOfToday,
+      });
       return res.status(400).json({
         success: false,
         message: "Already checked in",
@@ -281,7 +289,11 @@ exports.scanAttendance = async (req, res) => {
     }
     // Subscription/session handling: ensure limited packages have sessions remaining
     const subscription = member.subscription || {};
-    const isLimited = subscription.membershipType === "limited";
+    const hasSubscriptionPackage = Boolean(
+      subscription.packageId || subscription.planId,
+    );
+    const isLimited =
+      hasSubscriptionPackage && subscription.membershipType === "limited";
     let newRemainingSessions = null;
 
     if (isLimited) {
