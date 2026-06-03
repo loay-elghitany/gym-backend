@@ -321,7 +321,7 @@ const userSchema = new mongoose.Schema(
 userSchema.index({ tenantId: 1, email: 1 });
 
 // Normalize email and hash password before saving
-userSchema.pre("save", async function () {
+userSchema.pre("save", async function (next) {
   if (this.isModified("email") && typeof this.email === "string") {
     this.email = this.email.trim().toLowerCase();
   }

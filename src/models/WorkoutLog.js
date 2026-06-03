@@ -46,7 +46,7 @@ const workoutLogSchema = new mongoose.Schema(
 );
 
 // Pre-save hook to calculate totalVolume
-workoutLogSchema.pre("save", async function () {
+workoutLogSchema.pre("save", async function (next) {
   let sum = 0;
 
   if (Array.isArray(this.exercises)) {
