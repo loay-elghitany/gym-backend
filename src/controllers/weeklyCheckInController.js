@@ -8,7 +8,7 @@ const {
 // Create a weekly check-in (Trainee)
 exports.createWeeklyCheckIn = async (req, res) => {
   try {
-    const { traineeId } = req.user;
+    const traineeId = req.user.id || req.user._id || req.user.traineeId;
     // Accept unified payload: { currentWeight, fatigueLevel, notes, photos, inBody, trainerId }
     const { currentWeight, fatigueLevel, notes, photos, inBody, trainerId } =
       req.body;
@@ -233,7 +233,7 @@ exports.getTraineeCheckIns = async (req, res) => {
 // Get own check-ins (Trainee)
 exports.getMyCheckIns = async (req, res) => {
   try {
-    const { traineeId } = req.user;
+    const traineeId = req.user.id || req.user._id || req.user.traineeId;
 
     const checkIns = await WeeklyCheckIn.find({ traineeId })
       .sort({ createdAt: -1 })
