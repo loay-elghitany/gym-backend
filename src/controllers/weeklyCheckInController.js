@@ -1,12 +1,17 @@
 const WeeklyCheckIn = require("../models/WeeklyCheckIn");
 const User = require("../models/User");
-const { isValidCloudinaryUrl, normalizeCloudinaryUrl } = require("../utils/cloudinaryValidator");
+const {
+  isValidCloudinaryUrl,
+  normalizeCloudinaryUrl,
+} = require("../utils/cloudinaryValidator");
 
 // Create a weekly check-in (Trainee)
 exports.createWeeklyCheckIn = async (req, res) => {
   try {
     const { traineeId } = req.user;
-    const { currentWeight, fatigueLevel, notes, photos, trainerId } = req.body;
+    // Accept unified payload: { currentWeight, fatigueLevel, notes, photos, inBody, trainerId }
+    const { currentWeight, fatigueLevel, notes, photos, inBody, trainerId } =
+      req.body;
 
     // Find the trainee's tenant
     const trainee = await User.findById(traineeId);
@@ -17,27 +22,18 @@ exports.createWeeklyCheckIn = async (req, res) => {
       });
     }
 
-    // If trainerId is not provided, use the trainee's assigned trainer
-    let assignedTrainerId = trainerId;
-    if (!assignedTrainerId) {
-      // You might need to add a trainerId field to User schema or find another way
-      // For now, we'll require trainerId in the request
-      return res.status(400).json({
-        success: false,
-        message: "Trainer ID is required",
-      });
-    }
-
-    // Verify trainer exists and belongs to same tenant
-    const trainer = await User.findById(assignedTrainerId);
-    if (
-      !trainer ||
-      trainer.tenantId.toString() !== trainee.tenantId.toString()
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid trainer",
-      });
+    // Trainer is optional. If provided, validate it belongs to same tenant.
+    let assignedTrainerId = trainerId || null;
+    if (assignedTrainerId) {
+      const trainer = await User.findById(assignedTrainerId);
+      if (
+        !trainer ||
+        trainer.tenantId.toString() !== trainee.tenantId.toString()
+      ) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid trainer" });
+      }
     }
 
     // Check if check-in already exists for this week
@@ -62,6 +58,9 @@ exports.createWeeklyCheckIn = async (req, res) => {
       existingCheckIn.fatigueLevel =
         fatigueLevel || existingCheckIn.fatigueLevel;
       existingCheckIn.notes = notes || existingCheckIn.notes;
+      if (assignedTrainerId) {
+        existingCheckIn.trainerId = assignedTrainerId;
+      }
       if (photos && photos.length > 0) {
         // Normalize photos to objects { url, viewType, uploadedAt } and validate Cloudinary URLs
         existingCheckIn.photos = photos
@@ -87,6 +86,33 @@ exports.createWeeklyCheckIn = async (req, res) => {
           .filter(Boolean);
       }
       await existingCheckIn.save();
+
+      // If an inBody payload is provided, also save it to the user's inBodyRecords
+      if (inBody && (inBody.weight !== undefined || inBody.fileUrl)) {
+        try {
+          const safeFileUrl = inBody.fileUrl || null;
+          const inBodyRecord = {
+            date: new Date(),
+            weight: inBody.weight !== undefined ? Number(inBody.weight) : null,
+            fatPercentage:
+              inBody.fatPercentage !== undefined &&
+              inBody.fatPercentage !== null
+                ? Number(inBody.fatPercentage)
+                : null,
+            muscleMass:
+              inBody.muscleMass !== undefined && inBody.muscleMass !== null
+                ? Number(inBody.muscleMass)
+                : null,
+            fileUrl: safeFileUrl,
+            uploadedBy: "member",
+          };
+          await User.findByIdAndUpdate(traineeId, {
+            $push: { inBodyRecords: inBodyRecord },
+          });
+        } catch (err) {
+          console.error("Failed to save inBody record:", err);
+        }
+      }
       return res.status(200).json({
         success: true,
         message: "Weekly check-in updated successfully",
@@ -130,6 +156,32 @@ exports.createWeeklyCheckIn = async (req, res) => {
       weekNumber,
       year,
     });
+
+    // If an inBody payload is provided, also add it to the user's inBodyRecords
+    if (inBody && (inBody.weight !== undefined || inBody.fileUrl)) {
+      try {
+        const safeFileUrl = inBody.fileUrl || null;
+        const inBodyRecord = {
+          date: new Date(),
+          weight: inBody.weight !== undefined ? Number(inBody.weight) : null,
+          fatPercentage:
+            inBody.fatPercentage !== undefined && inBody.fatPercentage !== null
+              ? Number(inBody.fatPercentage)
+              : null,
+          muscleMass:
+            inBody.muscleMass !== undefined && inBody.muscleMass !== null
+              ? Number(inBody.muscleMass)
+              : null,
+          fileUrl: safeFileUrl,
+          uploadedBy: "member",
+        };
+        await User.findByIdAndUpdate(traineeId, {
+          $push: { inBodyRecords: inBodyRecord },
+        });
+      } catch (err) {
+        console.error("Failed to save inBody record:", err);
+      }
+    }
 
     res.status(201).json({
       success: true,

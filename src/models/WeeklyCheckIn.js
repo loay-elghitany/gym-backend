@@ -11,7 +11,8 @@ const weeklyCheckInSchema = new mongoose.Schema(
     trainerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      // Trainer is optional: allow trainees without an active trainer to submit
+      required: false,
       index: true,
     },
     tenantId: {
