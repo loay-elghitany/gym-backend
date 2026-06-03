@@ -10,6 +10,21 @@ const isDev = process.env.NODE_ENV !== "production";
 const shouldStartPolling = botToken && process.env.NODE_ENV !== "test";
 
 let bot;
+let hasLoggedTelegramPollingConflict = false;
+const isTelegramPollingConflict = (err) => {
+  if (!err) return false;
+  const normalizedMessage = String(
+    err.message || err.description || "",
+  ).toLowerCase();
+  return (
+    err.code === "ETELEGRAM" &&
+    (err.error_code === 409 ||
+      err?.response?.statusCode === 409 ||
+      normalizedMessage.includes("409 conflict") ||
+      normalizedMessage.includes("conflict"))
+  );
+};
+
 if (shouldStartPolling) {
   try {
     bot = new TelegramBot(botToken, { polling: true });
@@ -85,9 +100,19 @@ if (shouldStartPolling) {
     });
 
     // Global bot error listeners to prevent silent failures
-    bot.on("polling_error", (err) =>
-      console.error("[TelegramService] Polling error:", err),
-    );
+    bot.on("polling_error", (err) => {
+      if (isTelegramPollingConflict(err)) {
+        if (!hasLoggedTelegramPollingConflict) {
+          hasLoggedTelegramPollingConflict = true;
+          console.warn(
+            "[TelegramService] Telegram polling conflict: Another instance is running. Suppressing further polling errors.",
+          );
+        }
+        return;
+      }
+
+      console.error("[TelegramService] Polling error:", err);
+    });
     bot.on("webhook_error", (err) =>
       console.error("[TelegramService] Webhook error:", err),
     );
