@@ -6,7 +6,7 @@ const {
 } = require("../utils/cloudinaryValidator");
 
 // Create a weekly check-in (Trainee)
-exports.createWeeklyCheckIn = async (req, res) => {
+exports.createWeeklyCheckIn = async (req, res, next) => {
   try {
     const traineeId = req.user.id || req.user._id || req.user.traineeId;
     // Accept unified payload: { currentWeight, fatigueLevel, notes, photos, inBody, trainerId }
@@ -198,7 +198,7 @@ exports.createWeeklyCheckIn = async (req, res) => {
 };
 
 // Get check-ins for a specific trainee (Trainer)
-exports.getTraineeCheckIns = async (req, res) => {
+exports.getTraineeCheckIns = async (req, res, next) => {
   try {
     const { traineeId } = req.params;
     const { tenantId } = req.user;
@@ -231,7 +231,7 @@ exports.getTraineeCheckIns = async (req, res) => {
 };
 
 // Get own check-ins (Trainee)
-exports.getMyCheckIns = async (req, res) => {
+exports.getMyCheckIns = async (req, res, next) => {
   try {
     const traineeId = req.user.id || req.user._id || req.user.traineeId;
 
@@ -253,7 +253,7 @@ exports.getMyCheckIns = async (req, res) => {
 };
 
 // Add trainer feedback
-exports.addTrainerFeedback = async (req, res) => {
+exports.addTrainerFeedback = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { feedback } = req.body;
